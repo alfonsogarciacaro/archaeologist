@@ -17,8 +17,10 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v python &> /dev/null; then
-    echo "❌ Python not found. Please install Python first."
+if ! command -v uv &> /dev/null; then
+    echo "❌ uv not found. Please install uv first:"
+    echo "   pip install uv"
+    echo "   or visit: https://github.com/astral-sh/uv"
     exit 1
 fi
 
@@ -72,18 +74,22 @@ echo "🐍 Setting up Python environments..."
 # API virtual environment
 if [ ! -d "api/.venv" ]; then
     echo "Creating API virtual environment..."
-    cd api && python -m venv .venv
-    cd .venv && source bin/activate && pip install --upgrade pip && pip install -r requirements.txt
-    cd ../..
+    cd api && uv venv && cd ..
 fi
+
+# Install API dependencies
+echo "Installing API dependencies..."
+cd api && uv pip install -r requirements.txt && cd ..
 
 # Scanner virtual environment
 if [ ! -d "scanner/.venv" ]; then
     echo "Creating Scanner virtual environment..."
-    cd scanner && python -m venv .venv
-    cd .venv && source bin/activate && pip install --upgrade pip && pip install -r requirements.txt
-    cd ../..
+    cd scanner && uv venv && cd ..
 fi
+
+# Install Scanner dependencies
+echo "Installing Scanner dependencies..."
+cd scanner && uv pip install -r requirements.txt && cd ..
 
 # UI dependencies
 if [ ! -d "ui/node_modules" ]; then
@@ -96,14 +102,14 @@ echo "🚀 Starting debug services (separate processes)..."
 
 # Start Scanner service (background)
 echo "🔍 Starting Scanner service..."
-cd scanner && source .venv/bin/activate && python main.py &
+cd scanner && uv run python main.py &
 SCANNER_PID=$!
 cd ..
 echo "Scanner PID: $SCANNER_PID"
 
 # Start API service (background)
 echo "🌐 Starting API service..."
-cd api && source .venv/bin/activate && python -m app.main &
+cd api && uv run python -m app.main &
 API_PID=$!
 cd ..
 echo "API PID: $API_PID"

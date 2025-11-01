@@ -4,12 +4,15 @@ from typing import List, Dict, Any
 import subprocess
 import json
 import os
+import sys
 import logging
+
+# Add shared directory to Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
 
 # Import telemetry
 from telemetry import initialize_telemetry, get_tracer
 from config import get_settings
-from opentelemetry import trace
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

@@ -1,0 +1,6 @@
+{
+    "python-envs.pythonProjects": [
+        {"path": "${workspaceFolder}/api"},
+        {"path": "${workspaceFolder}/scanner"}
+    ]
+}

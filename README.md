@@ -6,6 +6,8 @@ An AI-powered investigation assistant that visualizes the hidden connections wit
 
 **⚠️ Important: Before running, ensure your environment variables are up to date by checking the `.env.dev` and `.env.prod` files. The application will fail to start if required environment variables are missing.**
 
+**⚠️ Requirements**: This project uses `uv` for Python package management. Install with `pip install uv` or visit https://github.com/astral-sh/uv.
+
 **For Debug Mode (fastest local development with separate processes):**
 ```bash
 ./debug.sh      # Start all services as separate processes
@@ -99,6 +101,12 @@ OTEL_RESOURCE_ATTRIBUTES=service.name=archaeologist-api,service.version=1.0.0,de
 - **Manual Instrumentation**: Key operations like investigations and scans include custom spans
 - **Error Tracking**: Failed operations are captured with detailed error information
 - **Metrics**: Ready for custom metrics collection
+|- **Graceful Degradation**: When telemetry is disabled, no-op tracers ensure application continues normally
+n**Disabling Telemetry for Development/Testing:**
+1. **Standard Way**: Set `OTEL_SDK_DISABLED=true` (recommended by OpenTelemetry)
+2. **Alternative**: Leave `OTEL_EXPORTER_OTLP_ENDPOINT` empty
+3. **Environment Override**: Set in `.env.dev` file for local development
+
 
 **Note**: You'll need to configure an OTLP-compatible telemetry collector (like Jaeger, Tempo, or a commercial service) to receive the telemetry data.
 
@@ -119,25 +127,25 @@ Note: Python (pip) and Node.js (npm) package registries can be configured at the
 ## Testing
 
 ```bash
+# Run all tests
+./test.sh
+
+# Run specific component tests
+./test.sh api          # API tests only
+./test.sh scanner      # Scanner tests only  
+./test.sh frontend     # Frontend tests only
+
+# Manual testing (if needed)
 # Debug mode tests (faster iteration)
-# Backend tests
-cd api && source .venv/bin/activate && pytest
+cd api && uv run python -m pytest
 
-# Scanner tests
-cd scanner && source .venv/bin/activate && pytest
+cd scanner && uv run python -m pytest
 
-# Frontend tests
 cd ui && npm test
 
 # Containerized tests (Docker/Podman)
-# Backend tests
 docker-compose exec app pytest
-
-# Scanner tests
 docker-compose exec scanner pytest
-
-# Frontend tests (development mode)
-cd ui && npm test
 ```
 
 ## Project Structure
@@ -152,6 +160,7 @@ enterprise-archaeologist/
 ├── debug-stop.sh              # Debug mode stop script
 ├── dev.sh                     # Development mode startup (containers)
 ├── deploy.sh                  # Production deployment script
+├── test.sh                    # Test runner for all components
 ├── api/                       # FastAPI backend + orchestrator
 ├── ui/                        # React frontend
 ├── scanner/                   # Code scanning microservice
