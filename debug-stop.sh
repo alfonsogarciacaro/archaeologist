@@ -38,6 +38,15 @@ if [ -f .debug_ui.pid ]; then
     rm -f .debug_ui.pid
 fi
 
+# Load development environment variables
+if [ -f .env.dev ]; then
+    export $(cat .env.dev | grep -v '^#' | xargs)
+    echo "✅ Loaded .env.dev"
+else
+    echo "❌ Error: .env.dev file not found!"
+    exit 1
+fi
+
 # Stop ChromaDB container
 echo "🗄️ Stopping ChromaDB container..."
 if command -v podman-compose &> /dev/null; then

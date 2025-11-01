@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
-  app:
+  api:
     build: 
-      context: .
+      context: ./api
       dockerfile: Dockerfile
     ports:
       - "${WEB_PORT}:8000"
@@ -25,14 +23,14 @@ services:
       - ./api/app:/app/app:ro
       - ./scanner:/app/scanner:ro
       - ./shared:/app/shared:ro
-      - ./ui:/app/ui:ro
+      - ./ui/build:/app/static:ro  # Mount built UI as static assets
       - ./mock_enterprise:/app/mock_enterprise:ro
     depends_on:
       - chromadb
       - scanner
 
   chromadb:
-    image: ${CONTAINER_REGISTRY}/ubi9/minimal
+    image: ${CHROMADB_IMAGE}
     ports:
       - "${CHROMADB_PORT}:8000"
     volumes:
@@ -40,12 +38,7 @@ services:
     environment:
       - CHROMA_SERVER_HOST=0.0.0.0
       - CHROMA_SERVER_HTTP_PORT=8000
-    command: >
-      sh -c "
-      dnf update -y && dnf install -y python3 python3-pip curl && dnf clean all &&
-      pip3 install chromadb &&
-      python3 -m chromadb run --host 0.0.0.0 --port 8000
-      "
+      - ANONYMIZED_TELEMETRY=false    
 
   scanner:
     build: 

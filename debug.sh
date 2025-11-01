@@ -102,23 +102,20 @@ echo "🚀 Starting debug services (separate processes)..."
 
 # Start Scanner service (background)
 echo "🔍 Starting Scanner service..."
-cd scanner && uv run python main.py &
+cd scanner && uv run python -m app.main &
 SCANNER_PID=$!
-cd ..
 echo "Scanner PID: $SCANNER_PID"
 
 # Start API service (background)
 echo "🌐 Starting API service..."
 cd api && uv run python -m app.main &
 API_PID=$!
-cd ..
 echo "API PID: $API_PID"
 
 # Start UI dev server (background)
 echo "⚛️ Starting React development server..."
 cd ui && PORT=$UI_DEV_PORT npm start &
 UI_PID=$!
-cd ..
 echo "UI PID: $UI_PID"
 
 echo ""

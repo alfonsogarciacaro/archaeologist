@@ -127,7 +127,36 @@ v
 
 ---
 
-## 8. Implementation Roadmap
+## 8. UI Technology Stack & Architecture
+
+The frontend is built with modern tooling for optimal development experience and performance:
+
+- **Build Tool**: Vite - Fast development server and optimized builds
+- **Framework**: React 18 with TypeScript
+- **Styling**: Tailwind CSS with custom theme and build-time pruning
+- **Visualization**: React Flow for the interactive dependency graph
+- **Icons**: Lucide React for consistent iconography
+- **Testing**: Jest with React Testing Library
+
+**Architecture Notes**:
+- **Development**: UI runs on Vite dev server (localhost:3000) with API proxy to backend
+- **Production**: UI is built as static assets and served by the FastAPI backend
+- **No separate container**: Frontend is not deployed as independent container service
+- **Static asset serving**: FastAPI serves the built UI from `/static` mount point
+
+**Vite Configuration**:
+- Development server on port 3000 with API proxy to localhost:8000
+- TypeScript compilation with type checking
+- Optimized production builds with chunk splitting
+
+**Tailwind CSS Configuration**:
+- Custom color palette with primary blues and neutral grays
+- Content scanning for automatic class pruning
+- PostCSS integration with Autoprefixer
+
+---
+
+## 9. Implementation Roadmap
 
 **Phase 0: Setup (1 hour)**
 - Create project root `enterprise-archaeologist`.
@@ -135,9 +164,9 @@ v
 - Set up `docker-compose.yml` for `api`, `ui`, and `chromadb` services.
 
 **Phase 1: The Visual Shell & Failing Tests (3 hours)**
-- **UI:** Create the basic React components for the Header, Graph area, and Sidebar. Use `react-flow` to render an empty graph. Style it to look close to the final design.
+- **UI:** Create the basic React components for the Header, Graph area, and Sidebar. Use `react-flow` to render an empty graph. Style with Tailwind CSS classes to achieve the final design without writing custom CSS.
 - **Frontend Tests:** Write the Jest tests for the UI components. They will run against the static shell.
-- **Backend:** Create the FastAPI app with a placeholder `/investigate` endpoint that returns static, dummy data.
+- **Backend:** Create the FastAPI app with a placeholder `/investigate` endpoint that returns static, dummy data and serves the built UI as static assets.
 - **Backend Tests:** Write the `pytest` tests. All tests will fail because the logic is not implemented.
 
 **Phase 2: The Deterministic Core (Tool 1 & Data Ingestion)**
@@ -156,17 +185,18 @@ v
 - Implement the Guardrail component.
 - Integrate it into the `/investigate` endpoint.
 - Make the final backend tests pass (`test_guardrail_validation`).
+- Configure FastAPI to serve the built UI as static assets.
 - Connect the real API to the React UI. Make the final frontend tests pass.
 
 **Phase 5: Polish & Showcase**
-- Refine UI animations and transitions.
+- Refine UI animations and transitions using Tailwind CSS classes.
 - Add more detail to the graph nodes and sidebar.
 - Write the final `README.md`.
 - Prepare the demo script.
 
 ---
 
-## 9. Initial File Structure
+## 10. Initial File Structure
 
 enterprise-archaeologist/
 ├── docker-compose.yml
@@ -200,10 +230,14 @@ enterprise-archaeologist/
 │ └── test_archaeologist.py
 │
 ├── ui/
-│ ├── Dockerfile
 │ ├── package.json
+│ ├── vite.config.ts
+│ ├── tailwind.config.js
+│ ├── postcss.config.js
 │ ├── public/
+│ │ └── index.html
 │ ├── src/
+│ │ ├── main.tsx
 │ │ ├── App.tsx
 │ │ ├── components/
 │ │ │ ├── Header.tsx
