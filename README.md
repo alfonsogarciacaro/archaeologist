@@ -154,6 +154,7 @@ docker-compose exec scanner pytest
 enterprise-archaeologist/
 ├── Dockerfile                 # Unified web container (API + UI build)
 ├── docker-compose.yml         # All services orchestrated
+├── .dockerignore             # Files to exclude from Docker builds
 ├── .env.dev                   # Development environment variables
 ├── .env.prod                  # Production environment variables
 ├── debug.sh                   # Debug mode startup (separate processes)
@@ -161,9 +162,22 @@ enterprise-archaeologist/
 ├── dev.sh                     # Development mode startup (containers)
 ├── deploy.sh                  # Production deployment script
 ├── test.sh                    # Test runner for all components
+├── shared/                    # Shared modules (telemetry, middleware)
+│   ├── __init__.py
+│   ├── telemetry.py
+│   └── middleware.py
 ├── api/                       # FastAPI backend + orchestrator
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   └── tools/
+│   ├── requirements.txt
+│   └── tests/
 ├── ui/                        # React frontend
 ├── scanner/                   # Code scanning microservice
+│   ├── main.py
+│   ├── config.py
+│   └── requirements.txt
 └── mock_enterprise/           # Sample enterprise data
 ```
 

@@ -9,7 +9,7 @@ import logging
 from .config import get_settings
 
 # Add shared directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
 
 # Import telemetry and middleware
 from telemetry import initialize_telemetry, get_tracer

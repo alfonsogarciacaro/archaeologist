@@ -8,12 +8,15 @@ RUN dnf update -y && dnf install -y \
     ripgrep \
     && dnf clean all
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy shared modules first
+COPY shared/ ./shared/
+
+# Copy scanner requirements for better caching
+COPY scanner/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy scanner application code
+COPY scanner/ .
 
 # Expose port
 EXPOSE 8000

@@ -15,15 +15,19 @@ RUN curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - \
     && dnf clean all
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install frontend dependencies and build for production
 COPY ui/package*.json ./ui/
 RUN cd ui && npm install
 
-# Copy application code
-COPY . .
+# Copy shared modules first
+COPY shared/ ./shared/
+
+# Copy application code (excluding unnecessary files)
+COPY api/app/ ./app/
+COPY ui/ ./ui/
 
 # Build frontend static files
 RUN cd ui && npm run build
