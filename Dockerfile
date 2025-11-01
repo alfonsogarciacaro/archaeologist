@@ -14,9 +14,12 @@ RUN curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - \
     && dnf install -y nodejs \
     && dnf clean all
 
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Install Python dependencies
-COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY api/pyproject.toml api/uv.lock ./
+RUN /root/.cargo/bin/uv pip sync uv.lock
 
 # Install frontend dependencies and build for production
 COPY ui/package*.json ./ui/

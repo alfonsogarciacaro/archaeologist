@@ -80,7 +80,7 @@ run_api_tests() {
     
     # Install dependencies
     cd api
-    uv pip install -r requirements.txt
+    uv pip sync pyproject.toml
     
     # Run tests with app directory in Python path and suppress warnings
     PYTHONPATH=. uv run python -m pytest tests/ -v --tb=short -W ignore::UserWarning -W ignore::DeprecationWarning
@@ -110,7 +110,7 @@ run_scanner_tests() {
     
     # Install dependencies
     cd scanner
-    uv pip install -r requirements.txt
+    uv pip sync pyproject.toml
     
     # Run tests with current directory in Python path
     uv run python -m pytest -v --tb=short

@@ -177,13 +177,13 @@ enterprise-archaeologist/
 │   │   ├── main.py
 │   │   ├── config.py
 │   │   └── tools/
-│   ├── requirements.txt
+│   pyproject.toml
 │   └── tests/
 ├── ui/                        # React frontend
 ├── scanner/                   # Code scanning microservice
 │   ├── main.py
 │   ├── config.py
-│   └── requirements.txt
+│   └── pyproject.toml
 └── mock_enterprise/           # Sample enterprise data
 ```
 

@@ -79,7 +79,7 @@ fi
 
 # Install API dependencies
 echo "Installing API dependencies..."
-cd api && uv pip install -r requirements.txt && cd ..
+cd api && uv pip sync pyproject.toml && cd ..
 
 # Scanner virtual environment
 if [ ! -d "scanner/.venv" ]; then
@@ -89,7 +89,7 @@ fi
 
 # Install Scanner dependencies
 echo "Installing Scanner dependencies..."
-cd scanner && uv pip install -r requirements.txt && cd ..
+cd scanner && uv pip sync pyproject.toml && cd ..
 
 # UI dependencies
 if [ ! -d "ui/node_modules" ]; then

@@ -55,12 +55,11 @@ project-name/
 │   ├── api/                  # FastAPI service
 │   │   ├── app/
 │   │   │   ├── main.py
-│   │   │   └── config.py
-│   │   └── requirements.txt
+│   │   └── pyproject.toml
 │   ├── scanner/              # Background service
 │   │   ├── main.py
 │   │   ├── config.py
-│   │   └── requirements.txt
+│   │   └── pyproject.toml
 │   └── ui/                  # Frontend (if applicable)
 │       ├── package.json
 │       └── src/
@@ -191,8 +190,8 @@ if [ ! -d "api/.venv" ]; then
 fi
 
 # Install dependencies
-cd api && uv pip install -r requirements.txt && cd ..
-cd scanner && uv pip install -r requirements.txt && cd ..
+cd api && uv pip sync pyproject.toml && cd ..
+cd scanner && uv pip sync pyproject.toml && cd ..
 
 # Start services in background
 cd scanner && uv run python main.py &
@@ -258,8 +257,8 @@ RUN dnf update -y && dnf install -y \
 COPY shared/ ./shared/
 
 # Copy and install Python dependencies
-COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY api/pyproject.toml api/uv.lock ./
+RUN pip install --no-cache-dir -r pyproject.toml
 
 # Copy application code
 COPY api/app/ ./app/

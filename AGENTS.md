@@ -215,7 +215,7 @@ enterprise-archaeologist/
 │
 ├── api/
 │ ├── Dockerfile
-│ ├── requirements.txt
+pyproject.toml
 │ ├── app/
 │ │ ├── init.py
 │ │ ├── main.py # FastAPI app and endpoints
