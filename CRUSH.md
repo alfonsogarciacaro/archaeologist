@@ -38,6 +38,8 @@ Our core development principle is **Visual & Test-First**. We will not write a s
 
 Implementation will then be an iterative process of making the tests pass, one by one, bringing the visual shell to life.
 
+> Use RHEL public images as base images for containers to ensure compatibility with enterprise environments. Dockerfile and docker-compose.yml must also be compatible with podman.
+
 ---
 
 ## 5. The Target UI: The System Impact Explorer

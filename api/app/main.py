@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
@@ -136,3 +138,21 @@ async def investigate_change(request: InvestigationRequest):
         knowledge_gaps=[KnowledgeGap(**gap) for gap in dummy_knowledge_gaps],
         summary=f"Found 4 components potentially impacted by: {request.query}"
     )
+
+# Mount static files for production
+if os.getenv("NODE_ENV") != "development":
+    app.mount("/static", StaticFiles(directory="ui/build/static"), name="static")
+
+    @app.get("/ui/{path:path}")
+    async def serve_ui(path: str):
+        """Serve React app for all UI routes"""
+        return FileResponse("ui/build/index.html")
+
+    @app.get("/")
+    async def serve_root():
+        """Serve React app at root"""
+        return FileResponse("ui/build/index.html")
+else:
+    @app.get("/")
+    async def root():
+        return {"message": "Enterprise Code Archaeologist API", "version": "1.0.0"}

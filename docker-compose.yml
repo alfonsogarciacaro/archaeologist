@@ -1,31 +1,22 @@
 version: '3.8'
 
 services:
-  ui:
-    build: ./ui
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-    volumes:
-      - ./ui:/app
-      - /app/node_modules
-    depends_on:
-      - api
-
-  api:
-    build: ./api
+  app:
+    build: .
     ports:
       - "8000:8000"
     environment:
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8001
-      - LLM_API_URL=http://localhost:11434/v1  # Local LLM (Ollama)
+      - LLM_API_URL=http://localhost:11434/v1
+      - SCANNER_URL=http://scanner:8000
+      - NODE_ENV=development
     volumes:
-      - ./api:/app
+      - .:/app
       - ./mock_enterprise:/app/mock_enterprise:ro
     depends_on:
       - chromadb
+      - scanner
 
   chromadb:
     image: chromadb/chroma:latest

@@ -4,15 +4,28 @@ An AI-powered investigation assistant that visualizes the hidden connections wit
 
 ## Quick Start
 
+**For Development (with hot reload):**
 ```bash
-# Start all services
-docker-compose up --build
-
-# UI: http://localhost:3000
-# API: http://localhost:8000
-# ChromaDB: http://localhost:8001
-# Scanner: http://localhost:8002
+./dev.sh
 ```
+
+**For Production Deployment:**
+```bash
+./deploy.sh
+```
+
+### Access Points
+
+- **Development**: 
+  - Frontend: http://localhost:3000 (React dev server)
+  - API: http://localhost:8000
+  - Scanner: http://localhost:8002
+  - ChromaDB: http://localhost:8001
+
+- **Production**:
+  - Application: http://localhost:8000 (serves both UI and API)
+  - Scanner: http://localhost:8002 (internal service)
+  - ChromaDB: http://localhost:8001
 
 ## The Problem
 
@@ -27,31 +40,52 @@ The Enterprise Code Archaeologist maps the impact of proposed changes across mul
 
 ## Architecture
 
+The consolidated setup uses a unified container for the web tier with separate microservices:
+- **App Container**: FastAPI + React (production) or FastAPI only (development)
+- **Scanner**: Separate microservice for long-running code scanning tasks
+- **ChromaDB**: Vector database for semantic search
+
 ```
-React UI → FastAPI Orchestrator → LLM Endpoint
-                ↓
-    Code Scanner + RAG Engine (ChromaDB) + Guardrail
+Production:  React (static) + FastAPI → Scanner → ChromaDB
+Development: React (dev server) → FastAPI → Scanner → ChromaDB
 ```
+
+## Resource Optimization
+
+The new approach reduces memory usage by:
+- **Consolidated web tier**: Single container for API + UI
+- **Separate scanner**: Non-blocking, long-running code searches
+- **Efficient static serving**: FastAPI serves production React build
 
 ## Development Status
 
 This project follows a **Visual & Test-First** approach. See [CRUSH.md](./CRUSH.md) for the complete development philosophy and roadmap.
 
-## Services
-
-- **ui**: React frontend with interactive dependency graph
-- **api**: FastAPI orchestrator that coordinates investigation
-- **chromadb**: Vector database for semantic search
-- **scanner**: Microservice for code scanning with ripgrep
-
 ## Testing
 
 ```bash
 # Backend tests
-docker-compose exec api pytest
+docker-compose exec app pytest
 
-# Frontend tests  
-docker-compose exec ui npm test
+# Scanner tests
+docker-compose exec scanner pytest
+
+# Frontend tests (development mode)
+cd ui && npm test
+```
+
+## Project Structure
+
+```
+enterprise-archaeologist/
+├── Dockerfile                 # Unified web container (API + UI build)
+├── docker-compose.yml         # All services orchestrated
+├── dev.sh / dev.bat          # Development startup scripts
+├── deploy.sh / deploy.bat    # Production deployment scripts
+├── api/                      # FastAPI backend + orchestrator
+├── ui/                       # React frontend
+├── scanner/                  # Code scanning microservice
+└── mock_enterprise/          # Sample enterprise data
 ```
 
 ## License
