@@ -1,5 +1,4 @@
-import '@testing-library/jest-dom';
-import React from 'react';
+import { describe, expect, test } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import InvestigationPanel from '../../src/components/InvestigationPanel';
 import { DependencyNode } from '../../src/types/types';

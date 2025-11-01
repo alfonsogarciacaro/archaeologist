@@ -1,11 +1,9 @@
-import '@testing-library/jest-dom';
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../src/App';
-import { ImpactReport } from '../../src/types/types';
+import { ImpactReport } from '../src/types/types';
 
-// Mock fetch to simulate API responses
 const mockImpactReport: ImpactReport = {
   query: "Change term_sheet_id from string to UUID",
   nodes: [
@@ -39,10 +37,9 @@ const mockImpactReport: ImpactReport = {
   summary: "Found 1 component potentially impacted"
 };
 
-describe('App Component Integration', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    global.fetch = jest.fn();
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
   });
 
   test('renders_app_with_header', () => {
@@ -62,7 +59,7 @@ describe('App Component Integration', () => {
   });
 
   test('submit_query_calls_api', async () => {
-    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    const mockFetch = global.fetch as any;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockImpactReport
@@ -91,7 +88,7 @@ describe('App Component Integration', () => {
   });
 
   test('renders_graph_from_api_response', async () => {
-    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    const mockFetch = global.fetch as any;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockImpactReport
@@ -111,7 +108,7 @@ describe('App Component Integration', () => {
   });
 
   test('knowledge_gap_banner_appears', async () => {
-    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    const mockFetch = global.fetch as any;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockImpactReport
@@ -134,7 +131,7 @@ describe('App Component Integration', () => {
   });
 
   test('node_click_opens_sidebar', async () => {
-    const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+    const mockFetch = global.fetch as any;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockImpactReport

@@ -7,7 +7,9 @@
     "start": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "jest"
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@reactflow/background": "^11.3.14",
@@ -25,38 +27,17 @@
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.4",
-    "@testing-library/react": "^13.4.0",
+    "@testing-library/react": "^14.0.0",
     "@testing-library/user-event": "^14.5.1",
-    "@types/jest": "^29.5.8",
     "@vitejs/plugin-react": "^4.1.0",
-    "autoprefixer": "^10.4.16",
-    "identity-obj-proxy": "^3.0.0",
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0",
-    "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.5",
-    "ts-jest": "^29.4.5",
-    "typescript": "^4.9.5",
-    "vite": "^7.1.12"
-  },
-  "jest": {
-    "testEnvironment": "jsdom",
-    "setupFilesAfterEnv": [
-      "<rootDir>/src/setupTests.ts"
-    ],
-    "moduleNameMapper": {
-      "\\.(css|less|scss|sass)$": "identity-obj-proxy"
-    },
-    "transform": {
-      "^.+\\.(ts|tsx)$": "ts-jest"
-    },
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json",
-      "node"
-    ]
+    "@vitest/coverage-v8": "^4.0.6",
+    "@vitest/ui": "^4.0.6",
+    "autoprefixer": "10.4.16",
+    "jsdom": "^23.0.0",
+    "postcss": "8.4.31",
+    "tailwindcss": "3.3.5",
+    "typescript": "4.9.5",
+    "vite": "7.1.12",
+    "vitest": "^4.0.6"
   }
 }

@@ -86,7 +86,7 @@ These user stories will be implemented as automated tests. They are our definiti
 -   `test_source_type_differentiation`: The system correctly identifies and tags sources as `live_repo` or `snapshot`.
 -   `test_guardrail_validation`: If the LLM hallucinates a file not found by the tools, the guardrail adds it to the report with a "verification needed" flag.
 
-**Frontend Tests (using `Jest` and `React Testing Library`):**
+**Frontend Tests (using `Vitest` and `React Testing Library`):**
 
 -   `test_renders_header`: The header with the search bar is rendered.
 -   `test_renders_empty_graph`: On initial load, the graph area is empty.
@@ -136,7 +136,7 @@ The frontend is built with modern tooling for optimal development experience and
 - **Styling**: Tailwind CSS with custom theme and build-time pruning
 - **Visualization**: React Flow for the interactive dependency graph
 - **Icons**: Lucide React for consistent iconography
-- **Testing**: Jest with React Testing Library
+- **Testing**: Vitest with React Testing Library
 
 **Architecture Notes**:
 - **Development**: UI runs on Vite dev server (localhost:3000) with API proxy to backend
@@ -165,7 +165,7 @@ The frontend is built with modern tooling for optimal development experience and
 
 **Phase 1: The Visual Shell & Failing Tests (3 hours)**
 - **UI:** Create the basic React components for the Header, Graph area, and Sidebar. Use `react-flow` to render an empty graph. Style with Tailwind CSS classes to achieve the final design without writing custom CSS.
-- **Frontend Tests:** Write the Jest tests for the UI components. They will run against the static shell.
+- **Frontend Tests:** Write the Vitest tests for the UI components. They will run against the static shell.
 - **Backend:** Create the FastAPI app with a placeholder `/investigate` endpoint that returns static, dummy data and serves the built UI as static assets.
 - **Backend Tests:** Write the `pytest` tests. All tests will fail because the logic is not implemented.
 

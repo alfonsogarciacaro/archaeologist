@@ -1,20 +1,19 @@
-import '@testing-library/jest-dom';
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Header from '../../src/components/Header';
 
 // Mock fetch for API calls
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('Header Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('renders_header', () => {
     // The header with the search bar is rendered
-    render(<Header onInvestigate={jest.fn()} isLoading={false} />);
+    render(<Header onInvestigate={vi.fn()} isLoading={false} />);
     
     expect(screen.getByText('Enterprise Code Archaeologist')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter change request (e.g., \'Change term_sheet_id from string to UUID\')')).toBeInTheDocument();
@@ -22,7 +21,7 @@ describe('Header Component', () => {
 
   test('submit_query_calls_api', async () => {
     // Submitting a query triggers a fetch call to the /investigate endpoint
-    const mockOnInvestigate = jest.fn();
+    const mockOnInvestigate = vi.fn();
     render(<Header onInvestigate={mockOnInvestigate} isLoading={false} />);
     
     const input = screen.getByPlaceholderText('Enter change request');
@@ -37,7 +36,7 @@ describe('Header Component', () => {
   });
 
   test('disables input and button when loading', () => {
-    render(<Header onInvestigate={jest.fn()} isLoading={true} />);
+    render(<Header onInvestigate={vi.fn()} isLoading={true} />);
     
     const input = screen.getByPlaceholderText('Enter change request');
     const submitButton = screen.getByRole('button');
@@ -47,7 +46,7 @@ describe('Header Component', () => {
   });
 
   test('shows loading spinner when loading', () => {
-    render(<Header onInvestigate={jest.fn()} isLoading={true} />);
+    render(<Header onInvestigate={vi.fn()} isLoading={true} />);
     
     // Check for loading spinner (should be present when loading)
     const loadingIcon = document.querySelector('.loading-icon');

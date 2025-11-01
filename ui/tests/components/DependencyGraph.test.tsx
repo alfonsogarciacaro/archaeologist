@@ -1,11 +1,11 @@
-import '@testing-library/jest-dom';
 import React from 'react';
+import { describe, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import DependencyGraph from '../../src/components/DependencyGraph';
 import { ImpactReport } from '../../src/types/types';
 
 // Mock reactflow to avoid rendering issues in tests
-jest.mock('reactflow', () => ({
+vi.mock('reactflow', () => ({
   ReactFlow: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="react-flow">{children}</div>
   ),
@@ -14,8 +14,8 @@ jest.mock('reactflow', () => ({
   ),
   Controls: () => <div data-testid="controls" />,
   MiniMap: () => <div data-testid="minimap" />,
-  useNodesState: () => [[], jest.fn()],
-  useEdgesState: () => [[], jest.fn()],
+  useNodesState: () => [[], vi.fn()],
+  useEdgesState: () => [[], vi.fn()],
   MarkerType: {
     ArrowClosed: 'arrowclosed',
   },
@@ -63,7 +63,7 @@ const mockReport: ImpactReport = {
 describe('DependencyGraph Component', () => {
   test('renders_empty_graph', () => {
     // On initial load, the graph area is empty
-    render(<DependencyGraph report={null} onNodeClick={jest.fn()} selectedNodeId={null} />);
+    render(<DependencyGraph report={null} onNodeClick={vi.fn()} selectedNodeId={null} />);
     
     expect(screen.getByText('No Investigation Data')).toBeInTheDocument();
     expect(screen.getByText('Enter a change request to see the dependency graph')).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('DependencyGraph Component', () => {
 
   test('renders_graph_from_api_response', () => {
     // When the API returns a mock impact report, the UI renders the correct nodes and edges
-    const onNodeClick = jest.fn();
+    const onNodeClick = vi.fn();
     render(<DependencyGraph report={mockReport} onNodeClick={onNodeClick} selectedNodeId={null} />);
     
     // Should render ReactFlow component
@@ -85,7 +85,7 @@ describe('DependencyGraph Component', () => {
 
   test('node_click_opens_sidebar', () => {
     // Clicking on a node in the graph displays its details in the sidebar
-    const onNodeClick = jest.fn();
+    const onNodeClick = vi.fn();
     render(<DependencyGraph report={mockReport} onNodeClick={onNodeClick} selectedNodeId="1" />);
     
     // The component should have received the selected node ID

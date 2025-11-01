@@ -374,6 +374,48 @@ class TracingMiddleware(BaseHTTPMiddleware):
 
 ## 🧪 Testing Template
 
+### Frontend Testing with Vitest
+
+For React applications, use Vitest instead of Jest for better performance and Vite integration:
+
+```json
+// package.json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "jsdom": "^23.0.0"
+  }
+}
+```
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    globals: true
+  }
+})
+```
+
+```typescript
+// src/test/setup.ts
+import '@testing-library/jest-dom'
+```
+
 ### Test with User Stories (STORIES.md)
 
 ```markdown
