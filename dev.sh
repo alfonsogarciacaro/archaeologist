@@ -11,9 +11,18 @@ if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null;
     exit 1
 fi
 
+# Load development environment variables
+if [ -f .env.dev ]; then
+    export $(cat .env.dev | grep -v '^#' | xargs)
+    echo "✅ Loaded .env.dev"
+else
+    echo "❌ Error: .env.dev file not found!"
+    exit 1
+fi
+
 # Start services in development mode
 echo "🚀 Starting services in development mode..."
-NODE_ENV=development docker-compose up --build
+docker-compose --env-file .env.dev up --build
 
 # Note: The frontend dev server will be accessible at http://localhost:3000
 # API will be accessible at http://localhost:8000

@@ -11,9 +11,18 @@ if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null;
     exit 1
 fi
 
+# Load production environment variables
+if [ -f .env.prod ]; then
+    export $(cat .env.prod | grep -v '^#' | xargs)
+    echo "✅ Loaded .env.prod"
+else
+    echo "❌ Error: .env.prod file not found!"
+    exit 1
+fi
+
 # Build and deploy in production mode
 echo "🏗️ Building and starting production services..."
-NODE_ENV=production docker-compose up --build -d
+docker-compose --env-file .env.prod up --build -d
 
 echo "✅ Application deployed successfully!"
 echo "🌐 Access the application at: http://localhost:8000"

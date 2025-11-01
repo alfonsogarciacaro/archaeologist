@@ -40,6 +40,10 @@ Implementation will then be an iterative process of making the tests pass, one b
 
 > Use RHEL public images as base images for containers to ensure compatibility with enterprise environments. Dockerfile and docker-compose.yml must also be compatible with podman.
 
+> Don't use .bat files for Windows; instead, use shell scripts that can run in Git Bash or WSL environments on Windows.
+
+> Centralize configuration in .env.dev and .env.prod files for development and production settings, respectively.
+
 ---
 
 ## 5. The Target UI: The System Impact Explorer

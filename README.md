@@ -4,7 +4,15 @@ An AI-powered investigation assistant that visualizes the hidden connections wit
 
 ## Quick Start
 
-**For Development (with hot reload):**
+**⚠️ Important: Before running, ensure your environment variables are up to date by checking the `.env.dev` and `.env.prod` files. The application will fail to start if required environment variables are missing.**
+
+**For Debug Mode (fastest local development with separate processes):**
+```bash
+./debug.sh      # Start all services as separate processes
+./debug-stop.sh # Stop debug services
+```
+
+**For Development Mode (containerized with hot reload):**
 ```bash
 ./dev.sh
 ```
@@ -16,7 +24,13 @@ An AI-powered investigation assistant that visualizes the hidden connections wit
 
 ### Access Points
 
-- **Development**: 
+- **Debug Mode**: 
+  - Frontend: http://localhost:3000 (React dev server)
+  - API: http://localhost:8000
+  - Scanner: http://localhost:8002
+  - ChromaDB: http://localhost:8001
+
+- **Development Mode**: 
   - Frontend: http://localhost:3000 (React dev server)
   - API: http://localhost:8000
   - Scanner: http://localhost:8002
@@ -64,6 +78,17 @@ This project follows a **Visual & Test-First** approach. See [CRUSH.md](./CRUSH.
 ## Testing
 
 ```bash
+# Debug mode tests (faster iteration)
+# Backend tests
+cd api && source .venv/bin/activate && pytest
+
+# Scanner tests
+cd scanner && source .venv/bin/activate && pytest
+
+# Frontend tests
+cd ui && npm test
+
+# Containerized tests
 # Backend tests
 docker-compose exec app pytest
 
@@ -80,12 +105,16 @@ cd ui && npm test
 enterprise-archaeologist/
 ├── Dockerfile                 # Unified web container (API + UI build)
 ├── docker-compose.yml         # All services orchestrated
-├── dev.sh / dev.bat          # Development startup scripts
-├── deploy.sh / deploy.bat    # Production deployment scripts
-├── api/                      # FastAPI backend + orchestrator
-├── ui/                       # React frontend
-├── scanner/                  # Code scanning microservice
-└── mock_enterprise/          # Sample enterprise data
+├── .env.dev                   # Development environment variables
+├── .env.prod                  # Production environment variables
+├── debug.sh                   # Debug mode startup (separate processes)
+├── debug-stop.sh              # Debug mode stop script
+├── dev.sh                     # Development mode startup (containers)
+├── deploy.sh                  # Production deployment script
+├── api/                       # FastAPI backend + orchestrator
+├── ui/                        # React frontend
+├── scanner/                   # Code scanning microservice
+└── mock_enterprise/           # Sample enterprise data
 ```
 
 ## License
