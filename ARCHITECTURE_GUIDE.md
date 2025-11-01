@@ -85,8 +85,9 @@ COMPOSE_PROJECT_NAME=project-name
 
 # ==== Service URLs ====
 SCANNER_URL=http://localhost:${SCANNER_PORT}
-VECTORDB_HOST=localhost|chromadb
-VECTORDB_SERVER_HTTP_PORT=8001
+VECTORDB_HOST=localhost|qdrant
+VECTORDB_TYPE=qdrant
+VECTORDB_COLLECTION_PREFIX=projectname
 LLM_API_URL=http://localhost:11434/v1
 
 # ==== Registry Configuration ====

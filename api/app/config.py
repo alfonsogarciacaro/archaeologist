@@ -13,11 +13,9 @@ class Settings:
             raise ValueError("COMPOSE_PROJECT_NAME environment variable is required")
         
         # Ports
-        self.WEB_PORT = int(os.getenv("WEB_PORT"))
-        self.SCANNER_PORT = int(os.getenv("SCANNER_PORT"))
-        self.VECTORDB_PORT = int(os.getenv("VECTORDB_PORT"))
-        self.UI_DEV_PORT = int(os.getenv("UI_DEV_PORT"))
-        
+        self.WEB_PORT = int(os.getenv("WEB_PORT", 8000))
+        self.SCANNER_PORT = int(os.getenv("SCANNER_PORT", 8002))
+
         # Service URLs
         self.SCANNER_URL = os.getenv("SCANNER_URL")
         if self.SCANNER_URL is None:
@@ -26,12 +24,16 @@ class Settings:
         self.VECTORDB_HOST = os.getenv("VECTORDB_HOST")
         if self.VECTORDB_HOST is None:
             raise ValueError("VECTORDB_HOST environment variable is required")
+
+        self.VECTORDB_PORT = int(os.getenv("VECTORDB_PORT", 8001))
+        if self.VECTORDB_PORT is None:
+            raise ValueError("VECTORDB_PORT environment variable is required")
         
-        self.VECTORDB_SERVER_HTTP_PORT = int(os.getenv("VECTORDB_SERVER_HTTP_PORT"))
-        if self.VECTORDB_SERVER_HTTP_PORT is None:
-            raise ValueError("VECTORDB_SERVER_HTTP_PORT environment variable is required")
+        self.VECTORDB_URL = f"http://{self.VECTORDB_HOST}:{self.VECTORDB_PORT}"
         
-        self.VECTORDB_URL = f"http://{self.VECTORDB_HOST}:{self.VECTORDB_SERVER_HTTP_PORT}"
+        # Vector Database Configuration
+        self.VECTORDB_TYPE = os.getenv("VECTORDB_TYPE", "qdrant")
+        self.VECTORDB_COLLECTION_PREFIX = os.getenv("VECTORDB_COLLECTION_PREFIX", "archaeologist")
         
         # LLM Configuration
         self.LLM_API_URL = os.getenv("LLM_API_URL")

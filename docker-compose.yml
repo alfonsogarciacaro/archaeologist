@@ -10,7 +10,6 @@ services:
       - SCANNER_URL=${SCANNER_URL}
       - VECTORDB_HOST=${VECTORDB_HOST}
       - VECTORDB_PORT=${VECTORDB_PORT}
-      - VECTORDB_SERVER_HTTP_PORT=${VECTORDB_SERVER_HTTP_PORT}
       - LLM_API_URL=${LLM_API_URL}
       - WEB_PORT=${WEB_PORT}
       - SCANNER_PORT=${SCANNER_PORT}
@@ -32,13 +31,13 @@ services:
   vectordb:
     image: ${VECTORDB_IMAGE}
     ports:
-      - "${VECTORDB_PORT}:8000"
+      - "${VECTORDB_PORT}:6333"
     volumes:
-      - vectordb_data:/chroma/chroma
+      - vectordb_data:/qdrant/storage
     environment:
-      - CHROMA_SERVER_HOST=0.0.0.0
-      - CHROMA_SERVER_HTTP_PORT=8000
-      - ANONYMIZED_TELEMETRY=false    
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__LOG_LEVEL=INFO
 
   scanner:
     build: 
