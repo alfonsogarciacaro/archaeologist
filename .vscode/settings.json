@@ -1,6 +1,14 @@
 {
     "python-envs.pythonProjects": [
-        {"path": "${workspaceFolder}/api"},
-        {"path": "${workspaceFolder}/scanner"}
+        {
+            "path": "${workspaceFolder}/api",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "${workspaceFolder}/scanner",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
     ]
 }
