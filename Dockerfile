@@ -25,7 +25,7 @@ RUN cd ui && npm install
 # Copy shared modules first
 COPY shared/ ./shared/
 
-# Copy application code (excluding unnecessary files)
+# Copy application code (excluding tests for production)
 COPY api/app/ ./app/
 COPY ui/ ./ui/
 

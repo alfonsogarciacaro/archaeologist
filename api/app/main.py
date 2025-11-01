@@ -8,8 +8,20 @@ import sys
 import logging
 from .config import get_settings
 
-# Add shared directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+# Add shared directory to Python path (navigate up until found)
+def find_dir_upwards(dirname: str = "shared") -> str:
+    """Find shared directory by navigating up from current location"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        found = os.path.join(current_dir, dirname)
+        if os.path.exists(found):
+            return found        
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir == current_dir:  # Reached root
+            raise FileNotFoundError("shared directory not found")
+        current_dir = parent_dir
+
+sys.path.insert(0, find_dir_upwards("shared"))
 
 # Import telemetry and middleware
 from telemetry import initialize_telemetry, get_tracer

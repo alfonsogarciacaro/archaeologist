@@ -15,8 +15,11 @@ COPY shared/ ./shared/
 COPY scanner/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy scanner application code
-COPY scanner/ .
+# Copy scanner application code (excluding tests for production)
+COPY scanner/app .
+
+# Copy mock enterprise data
+COPY scanner/mock_enterprise/ ./mock_enterprise/
 
 # Expose port
 EXPOSE 8000

@@ -79,6 +79,12 @@ The new approach reduces memory usage by:
 
 This project follows a **Visual & Test-First** approach. See [CRUSH.md](./CRUSH.md) for the complete development philosophy and roadmap.
 
+## 📚 Architecture Documentation
+
+For setting up similar enterprise projects, see:
+- **[ARCHITECTURE_GUIDE.md](./ARCHITECTURE_GUIDE.md)** - Complete setup template and best practices
+- **[USER_STORIES.md](./USER_STORIES.md)** - User stories with testable acceptance criteria
+
 ## Telemetry Configuration
 
 The API and Scanner services are instrumented with OpenTelemetry for distributed tracing and metrics. Telemetry configuration is controlled through environment variables:
