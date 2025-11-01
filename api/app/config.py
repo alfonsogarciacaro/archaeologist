@@ -15,7 +15,7 @@ class Settings:
         # Ports
         self.WEB_PORT = int(os.getenv("WEB_PORT"))
         self.SCANNER_PORT = int(os.getenv("SCANNER_PORT"))
-        self.CHROMADB_PORT = int(os.getenv("CHROMADB_PORT"))
+        self.VECTORDB_PORT = int(os.getenv("VECTORDB_PORT"))
         self.UI_DEV_PORT = int(os.getenv("UI_DEV_PORT"))
         
         # Service URLs
@@ -23,15 +23,15 @@ class Settings:
         if self.SCANNER_URL is None:
             raise ValueError("SCANNER_URL environment variable is required")
         
-        self.CHROMADB_HOST = os.getenv("CHROMADB_HOST")
-        if self.CHROMADB_HOST is None:
-            raise ValueError("CHROMADB_HOST environment variable is required")
+        self.VECTORDB_HOST = os.getenv("VECTORDB_HOST")
+        if self.VECTORDB_HOST is None:
+            raise ValueError("VECTORDB_HOST environment variable is required")
         
-        self.CHROMADB_SERVER_HTTP_PORT = int(os.getenv("CHROMADB_SERVER_HTTP_PORT"))
-        if self.CHROMADB_SERVER_HTTP_PORT is None:
-            raise ValueError("CHROMADB_SERVER_HTTP_PORT environment variable is required")
+        self.VECTORDB_SERVER_HTTP_PORT = int(os.getenv("VECTORDB_SERVER_HTTP_PORT"))
+        if self.VECTORDB_SERVER_HTTP_PORT is None:
+            raise ValueError("VECTORDB_SERVER_HTTP_PORT environment variable is required")
         
-        self.CHROMADB_URL = f"http://{self.CHROMADB_HOST}:{self.CHROMADB_SERVER_HTTP_PORT}"
+        self.VECTORDB_URL = f"http://{self.VECTORDB_HOST}:{self.VECTORDB_SERVER_HTTP_PORT}"
         
         # LLM Configuration
         self.LLM_API_URL = os.getenv("LLM_API_URL")

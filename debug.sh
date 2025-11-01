@@ -2,7 +2,7 @@
 
 # Debug mode for Enterprise Code Archaeologist
 # This script runs services as separate processes for faster development iteration
-# with virtual environments and a container only for ChromaDB
+# with virtual environments and a container only for the vector database
 
 echo "🔧 Setting up debug environment (separate processes)..."
 
@@ -38,35 +38,35 @@ else
     exit 1
 fi
 
-# Start ChromaDB container only
-echo "🗄️ Starting ChromaDB container..."
+# Start VectorDB container only
+echo "🗄️ Starting VectorDB container..."
 if command -v podman-compose &> /dev/null; then
-    podman-compose -f docker-compose.yml up chromadb -d
+    podman-compose -f docker-compose.yml up vectordb -d
 elif command -v docker-compose &> /dev/null; then
-    docker-compose -f docker-compose.yml up chromadb -d
+    docker-compose -f docker-compose.yml up vectordb -d
 else
-    docker -f docker-compose.yml compose up chromadb -d
+    docker -f docker-compose.yml compose up vectordb -d
 fi
 
-# Check if ChromaDB is running
+# Check if VectorDB is running
 if command -v podman-compose &> /dev/null; then
-    if ! podman-compose -f docker-compose.yml ps chromadb | grep -q "Up"; then
-        echo "❌ Failed to start ChromaDB"
+    if ! podman-compose -f docker-compose.yml ps vectordb | grep -q "Up"; then
+        echo "❌ Failed to start VectorDB"
         exit 1
     fi
 elif command -v docker-compose &> /dev/null; then
-    if ! docker-compose -f docker-compose.yml ps chromadb | grep -q "Up"; then
-        echo "❌ Failed to start ChromaDB"
+    if ! docker-compose -f docker-compose.yml ps vectordb | grep -q "Up"; then
+        echo "❌ Failed to start VectorDB"
         exit 1
     fi
 else
-    if ! docker compose ps chromadb | grep -q "Up"; then
-        echo "❌ Failed to start ChromaDB"
+    if ! docker compose ps vectordb | grep -q "Up"; then
+        echo "❌ Failed to start VectorDB"
         exit 1
     fi
 fi
 
-echo "✅ ChromaDB started at http://localhost:${CHROMADB_PORT}"
+echo "✅ VectorDB started at http://localhost:${VECTORDB_PORT}"
 
 # Setup virtual environments and install dependencies if needed
 echo "🐍 Setting up Python environments..."
@@ -123,7 +123,7 @@ echo "✅ Debug environment started successfully!"
 echo "🌐 Frontend: http://localhost:${UI_DEV_PORT}"
 echo "🔌 API: http://localhost:${WEB_PORT}"
 echo "🔍 Scanner: http://localhost:${SCANNER_PORT}"
-echo "🗄️ ChromaDB: http://localhost:${CHROMADB_PORT}"
+echo "🗄️ VectorDB: http://localhost:${VECTORDB_PORT}"
 echo ""
 echo "📋 Process IDs:"
 echo "   - Scanner: $SCANNER_PID"

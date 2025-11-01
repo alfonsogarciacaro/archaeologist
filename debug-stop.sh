@@ -47,8 +47,8 @@ else
     exit 1
 fi
 
-# Stop ChromaDB container
-echo "🗄️ Stopping ChromaDB container..."
+# Stop VectorDB container
+echo "🗄️ Stopping VectorDB container..."
 if command -v podman-compose &> /dev/null; then
     podman-compose down
 elif command -v docker-compose &> /dev/null; then

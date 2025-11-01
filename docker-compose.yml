@@ -8,9 +8,9 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV}
       - SCANNER_URL=${SCANNER_URL}
-      - CHROMADB_HOST=${CHROMADB_HOST}
-      - CHROMADB_PORT=${CHROMADB_PORT}
-      - CHROMADB_SERVER_HTTP_PORT=${CHROMADB_SERVER_HTTP_PORT}
+      - VECTORDB_HOST=${VECTORDB_HOST}
+      - VECTORDB_PORT=${VECTORDB_PORT}
+      - VECTORDB_SERVER_HTTP_PORT=${VECTORDB_SERVER_HTTP_PORT}
       - LLM_API_URL=${LLM_API_URL}
       - WEB_PORT=${WEB_PORT}
       - SCANNER_PORT=${SCANNER_PORT}
@@ -26,15 +26,15 @@ services:
       - ./ui/build:/app/static:ro  # Mount built UI as static assets
       - ./mock_enterprise:/app/mock_enterprise:ro
     depends_on:
-      - chromadb
+      - vectordb
       - scanner
 
-  chromadb:
-    image: ${CHROMADB_IMAGE}
+  vectordb:
+    image: ${VECTORDB_IMAGE}
     ports:
-      - "${CHROMADB_PORT}:8000"
+      - "${VECTORDB_PORT}:8000"
     volumes:
-      - chromadb_data:/chroma/chroma
+      - vectordb_data:/chroma/chroma
     environment:
       - CHROMA_SERVER_HOST=0.0.0.0
       - CHROMA_SERVER_HTTP_PORT=8000
@@ -61,4 +61,4 @@ services:
       - OTEL_RESOURCE_ATTRIBUTES=service.name=archaeologist-scanner,service.version=${OTEL_SERVICE_VERSION},deployment.environment=${NODE_ENV}
 
 volumes:
-  chromadb_data:
+  vectordb_data:

@@ -76,7 +76,7 @@ project-name/
 # ==== Application Ports ====
 WEB_PORT=8000
 SCANNER_PORT=8002
-CHROMADB_PORT=8001
+VECTORDB_PORT=8001
 UI_DEV_PORT=3000
 
 # ==== Environment ====
@@ -85,8 +85,8 @@ COMPOSE_PROJECT_NAME=project-name
 
 # ==== Service URLs ====
 SCANNER_URL=http://localhost:${SCANNER_PORT}
-CHROMADB_HOST=localhost|chromadb
-CHROMADB_SERVER_HTTP_PORT=8001
+VECTORDB_HOST=localhost|chromadb
+VECTORDB_SERVER_HTTP_PORT=8001
 LLM_API_URL=http://localhost:11434/v1
 
 # ==== Registry Configuration ====
@@ -292,7 +292,7 @@ services:
       - ./shared:/app/shared:ro
     depends_on:
       - scanner
-      - chromadb
+      - vectordb
 
   scanner:
     build: 

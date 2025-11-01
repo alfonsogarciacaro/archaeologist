@@ -37,4 +37,4 @@ fi
 
 # Note: The frontend dev server will be accessible at http://localhost:3000
 # API will be accessible at http://localhost:8000
-# ChromaDB will be accessible at http://localhost:8001
+# VectorDB will be accessible at http://localhost:8001

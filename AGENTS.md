@@ -113,14 +113,14 @@ v v v
 +---------------------+ +-----------------------+ +-------------------+
 | | | | | |
 | Tool 1: Code | | Tool 2: RAG Engine | | Guardrail |
-| Scanner (ripgrep) | | (ChromaDB + BM25) | | (Pydantic) |
+| Scanner (ripgrep) | | (VectorDB + BM25) | | (Pydantic) |
 | | | | | |
 +---------------------+ +-----------+-----------+ +-------------------+
 |
 v
 +-----------------+
 | |
-| ChromaDB Store |
+| VectorDB Store |
 | |
 +-----------------+
 
@@ -161,7 +161,7 @@ The frontend is built with modern tooling for optimal development experience and
 **Phase 0: Setup (1 hour)**
 - Create project root `enterprise-archaeologist`.
 - Initialize Git repo.
-- Set up `docker-compose.yml` for `api`, `ui`, and `chromadb` services.
+- Set up `docker-compose.yml` for `api`, `ui`, and `vectordb` services.
 
 **Phase 1: The Visual Shell & Failing Tests (3 hours)**
 - **UI:** Create the basic React components for the Header, Graph area, and Sidebar. Use `react-flow` to render an empty graph. Style with Tailwind CSS classes to achieve the final design without writing custom CSS.
@@ -172,7 +172,7 @@ The frontend is built with modern tooling for optimal development experience and
 **Phase 2: The Deterministic Core (Tool 1 & Data Ingestion)**
 - Implement the `mock_enterprise` system.
 - Build the Code Scanner microservice.
-- Implement the data ingestion script for ChromaDB.
+- Implement the data ingestion script for VectorDB
 - Make the first set of backend tests pass (`test_simple_literal_search`, `test_source_type_differentiation`).
 
 **Phase 3: The Semantic Brain (Tool 2 & Orchestrator)**
@@ -225,7 +225,7 @@ pyproject.toml
 │ │ │ ├── scanner.py # Tool 1
 │ │ │ └── rag_engine.py # Tool 2
 │ │ ├── guardrail.py # Validation component
-│ │ └── data_ingestion.py # Script to populate ChromaDB
+│ │ └── data_ingestion.py # Script to populate VectorDB
 │ └── tests/
 │ └── test_archaeologist.py
 │

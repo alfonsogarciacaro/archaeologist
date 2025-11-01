@@ -30,18 +30,18 @@ An AI-powered investigation assistant that visualizes the hidden connections wit
   - Frontend: http://localhost:3000 (React dev server)
   - API: http://localhost:8000
   - Scanner: http://localhost:8002
-  - ChromaDB: http://localhost:8001
+  - VectorDB: http://localhost:8001
 
 - **Development Mode**: 
   - Frontend: http://localhost:3000 (React dev server)
   - API: http://localhost:8000
   - Scanner: http://localhost:8002
-  - ChromaDB: http://localhost:8001
+  - VectorDB: http://localhost:8001
 
 - **Production**:
   - Application: http://localhost:8000 (serves both UI and API)
   - Scanner: http://localhost:8002 (internal service)
-  - ChromaDB: http://localhost:8001
+  - VectorDB: http://localhost:8001
 
 ## The Problem
 
@@ -59,13 +59,13 @@ The Enterprise Code Archaeologist maps the impact of proposed changes across mul
 The consolidated setup uses a unified container for the web tier with separate microservices. All containers are based on RHEL UBI (Universal Base Image) for enterprise compatibility:
 - **App Container**: FastAPI + React (production) or FastAPI only (development) - RHEL UBI9 Python
 - **Scanner**: Separate microservice for long-running code scanning tasks - RHEL UBI9 Python  
-- **ChromaDB**: Vector database for semantic search - RHEL UBI9 Minimal
+- **VectorDB**: Vector database for semantic search - RHEL UBI9 Minimal
 
 All Docker and docker-compose files are compatible with both Docker and Podman for RHEL environments.
 
 ```
-Production:  React (static) + FastAPI → Scanner → ChromaDB
-Development: React (dev server) → FastAPI → Scanner → ChromaDB
+Production:  React (static) + FastAPI → Scanner → VectorDB
+Development: React (dev server) → FastAPI → Scanner → VectorDB
 ```
 
 ## Resource Optimization

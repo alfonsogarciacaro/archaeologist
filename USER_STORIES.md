@@ -51,7 +51,7 @@ So that I can identify system issues quickly
 
 Acceptance Criteria:
 - Service health check includes scanner status
-- Service health check includes ChromaDB status
+- Service health check includes VectorDB status
 - Failed dependency checks return specific error messages
 - Health endpoint times out after 5 seconds if dependencies are down
 ```
