@@ -1,12 +1,12 @@
-FROM python:3.11-slim
+FROM ${CONTAINER_REGISTRY}/ubi9/python-311
 
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN dnf update -y && dnf install -y \
     gcc \
     ripgrep \
-    && rm -rf /var/lib/apt/lists/*
+    && dnf clean all
 
 # Copy requirements first for better caching
 COPY requirements.txt .

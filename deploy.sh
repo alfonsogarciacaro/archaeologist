@@ -5,9 +5,14 @@
 
 echo "🚀 Deploying Enterprise Code Archaeologist in production mode..."
 
-# Check if docker-compose is available
-if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
-    echo "❌ Docker or docker-compose not found. Please install Docker first."
+# Set docker command alias
+if ! command -v docker &> /dev/null && command -v podman &> /dev/null; then
+    alias docker=podman
+fi
+
+# Check if docker-compose or podman-compose is available
+if ! command -v podman-compose &> /dev/null && ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
+    echo "❌ Docker/Podman not found. Please install Docker or Podman first."
     exit 1
 fi
 
@@ -22,7 +27,13 @@ fi
 
 # Build and deploy in production mode
 echo "🏗️ Building and starting production services..."
-docker-compose --env-file .env.prod up --build -d
+if command -v podman-compose &> /dev/null; then
+    podman-compose --env-file .env.prod up --build -d
+elif command -v docker-compose &> /dev/null; then
+    docker-compose --env-file .env.prod up --build -d
+else
+    docker --env-file .env.prod compose up --build -d
+fi
 
 echo "✅ Application deployed successfully!"
 echo "🌐 Access the application at: http://localhost:8000"
@@ -31,4 +42,10 @@ echo "🔍 API health check: http://localhost:8000/health"
 # Show running containers
 echo ""
 echo "📦 Running containers:"
-docker-compose ps
+if command -v podman-compose &> /dev/null; then
+    podman-compose ps
+elif command -v docker-compose &> /dev/null; then
+    docker-compose ps
+else
+    docker compose ps
+fi

@@ -6,9 +6,14 @@
 
 echo "🔧 Setting up debug environment (separate processes)..."
 
+# Set docker command alias
+if ! command -v docker &> /dev/null && command -v podman &> /dev/null; then
+    alias docker=podman
+fi
+
 # Check if required commands are available
 if ! command -v docker &> /dev/null; then
-    echo "❌ Docker not found. Please install Docker first."
+    echo "❌ Docker or Podman not found. Please install Docker or Podman first."
     exit 1
 fi
 
@@ -33,12 +38,30 @@ fi
 
 # Start ChromaDB container only
 echo "🗄️ Starting ChromaDB container..."
-docker-compose -f docker-compose.yml up chromadb -d
+if command -v podman-compose &> /dev/null; then
+    podman-compose -f docker-compose.yml up chromadb -d
+elif command -v docker-compose &> /dev/null; then
+    docker-compose -f docker-compose.yml up chromadb -d
+else
+    docker -f docker-compose.yml compose up chromadb -d
+fi
 
 # Check if ChromaDB is running
-if ! docker-compose -f docker-compose.yml ps chromadb | grep -q "Up"; then
-    echo "❌ Failed to start ChromaDB"
-    exit 1
+if command -v podman-compose &> /dev/null; then
+    if ! podman-compose -f docker-compose.yml ps chromadb | grep -q "Up"; then
+        echo "❌ Failed to start ChromaDB"
+        exit 1
+    fi
+elif command -v docker-compose &> /dev/null; then
+    if ! docker-compose -f docker-compose.yml ps chromadb | grep -q "Up"; then
+        echo "❌ Failed to start ChromaDB"
+        exit 1
+    fi
+else
+    if ! docker compose ps chromadb | grep -q "Up"; then
+        echo "❌ Failed to start ChromaDB"
+        exit 1
+    fi
 fi
 
 echo "✅ ChromaDB started at http://localhost:${CHROMADB_PORT}"
@@ -49,7 +72,7 @@ echo "🐍 Setting up Python environments..."
 # API virtual environment
 if [ ! -d "api/.venv" ]; then
     echo "Creating API virtual environment..."
-    cd api && python3 -m venv .venv
+    cd api && python -m venv .venv
     cd .venv && source bin/activate && pip install --upgrade pip && pip install -r requirements.txt
     cd ../..
 fi
@@ -57,7 +80,7 @@ fi
 # Scanner virtual environment
 if [ ! -d "scanner/.venv" ]; then
     echo "Creating Scanner virtual environment..."
-    cd scanner && python3 -m venv .venv
+    cd scanner && python -m venv .venv
     cd .venv && source bin/activate && pip install --upgrade pip && pip install -r requirements.txt
     cd ../..
 fi
@@ -113,7 +136,7 @@ echo "$API_PID" > .debug_api.pid
 echo "$UI_PID" > .debug_ui.pid
 
 # Wait for user to stop
-trap 'echo "Stopping services..."; kill $SCANNER_PID $API_PID $UI_PID 2>/dev/null; docker-compose down; rm -f .debug_*.pid; exit' INT
+trap 'echo "Stopping services..."; kill $SCANNER_PID $API_PID $UI_PID 2>/dev/null; if command -v podman-compose &> /dev/null; then podman-compose down; elif command -v docker-compose &> /dev/null; then docker-compose down; else docker compose down; fi; rm -f .debug_*.pid; exit' INT
 
 echo "Press Ctrl+C to stop all services"
 wait

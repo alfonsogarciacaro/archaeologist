@@ -1,18 +1,18 @@
-FROM python:3.11-slim
+FROM ${CONTAINER_REGISTRY}/ubi9/python-311
 
 WORKDIR /app
 
 # Install system dependencies including Node.js for frontend builds
-RUN apt-get update && apt-get install -y \
+RUN dnf update -y && dnf install -y \
     gcc \
     ripgrep \
     curl \
-    gnupg \
-    && rm -rf /var/lib/apt/lists/*
+    && dnf clean all
 
-# Install Node.js 18.x
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs
+# Install Node.js 18.x from NodeSource
+RUN curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - \
+    && dnf install -y nodejs \
+    && dnf clean all
 
 # Install Python dependencies
 COPY requirements.txt .

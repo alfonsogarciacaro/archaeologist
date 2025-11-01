@@ -5,9 +5,14 @@
 
 echo "🔧 Setting up development environment..."
 
-# Check if docker-compose is available
-if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
-    echo "❌ Docker or docker-compose not found. Please install Docker first."
+# Set docker command alias
+if ! command -v docker &> /dev/null && command -v podman &> /dev/null; then
+    alias docker=podman
+fi
+
+# Check if docker-compose or podman-compose is available
+if ! command -v podman-compose &> /dev/null && ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
+    echo "❌ Docker/Podman not found. Please install Docker or Podman first."
     exit 1
 fi
 
@@ -22,7 +27,13 @@ fi
 
 # Start services in development mode
 echo "🚀 Starting services in development mode..."
-docker-compose --env-file .env.dev up --build
+if command -v podman-compose &> /dev/null; then
+    podman-compose --env-file .env.dev up --build
+elif command -v docker-compose &> /dev/null; then
+    docker-compose --env-file .env.dev up --build
+else
+    docker --env-file .env.dev compose up --build
+fi
 
 # Note: The frontend dev server will be accessible at http://localhost:3000
 # API will be accessible at http://localhost:8000

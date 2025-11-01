@@ -54,10 +54,12 @@ The Enterprise Code Archaeologist maps the impact of proposed changes across mul
 
 ## Architecture
 
-The consolidated setup uses a unified container for the web tier with separate microservices:
-- **App Container**: FastAPI + React (production) or FastAPI only (development)
-- **Scanner**: Separate microservice for long-running code scanning tasks
-- **ChromaDB**: Vector database for semantic search
+The consolidated setup uses a unified container for the web tier with separate microservices. All containers are based on RHEL UBI (Universal Base Image) for enterprise compatibility:
+- **App Container**: FastAPI + React (production) or FastAPI only (development) - RHEL UBI9 Python
+- **Scanner**: Separate microservice for long-running code scanning tasks - RHEL UBI9 Python  
+- **ChromaDB**: Vector database for semantic search - RHEL UBI9 Minimal
+
+All Docker and docker-compose files are compatible with both Docker and Podman for RHEL environments.
 
 ```
 Production:  React (static) + FastAPI → Scanner → ChromaDB
@@ -75,6 +77,20 @@ The new approach reduces memory usage by:
 
 This project follows a **Visual & Test-First** approach. See [CRUSH.md](./CRUSH.md) for the complete development philosophy and roadmap.
 
+## Registry Configuration
+
+The project supports configurable container registries through environment variables. Add `CONTAINER_REGISTRY` to your `.env.dev` or `.env.prod` files:
+
+```bash
+# Default (public RHEL registry)
+CONTAINER_REGISTRY=registry.access.redhat.com
+
+# Internal company registry example
+CONTAINER_REGISTRY=registry.company.com/internal
+```
+
+Note: Python (pip) and Node.js (npm) package registries can be configured at the machine level using standard pip/npm configuration methods.
+
 ## Testing
 
 ```bash
@@ -88,7 +104,7 @@ cd scanner && source .venv/bin/activate && pytest
 # Frontend tests
 cd ui && npm test
 
-# Containerized tests
+# Containerized tests (Docker/Podman)
 # Backend tests
 docker-compose exec app pytest
 

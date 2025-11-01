@@ -22,7 +22,7 @@ services:
       - scanner
 
   chromadb:
-    image: chromadb/chroma:latest
+    image: ${CONTAINER_REGISTRY}/ubi9/minimal
     ports:
       - "${CHROMADB_PORT}:8000"
     volumes:
@@ -30,6 +30,12 @@ services:
     environment:
       - CHROMA_SERVER_HOST=0.0.0.0
       - CHROMA_SERVER_HTTP_PORT=8000
+    command: >
+      sh -c "
+      dnf update -y && dnf install -y python3 python3-pip curl && dnf clean all &&
+      pip3 install chromadb &&
+      python3 -m chromadb run --host 0.0.0.0 --port 8000
+      "
 
   scanner:
     build: ./scanner

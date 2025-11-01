@@ -5,6 +5,11 @@
 
 echo "🛑 Stopping debug environment..."
 
+# Set docker command alias
+if ! command -v docker &> /dev/null && command -v podman &> /dev/null; then
+    alias docker=podman
+fi
+
 # Stop processes using saved PIDs
 if [ -f .debug_scanner.pid ]; then
     SCANNER_PID=$(cat .debug_scanner.pid)
@@ -35,6 +40,12 @@ fi
 
 # Stop ChromaDB container
 echo "🗄️ Stopping ChromaDB container..."
-docker-compose down
+if command -v podman-compose &> /dev/null; then
+    podman-compose down
+elif command -v docker-compose &> /dev/null; then
+    docker-compose down
+else
+    docker compose down
+fi
 
 echo "✅ Debug environment stopped successfully!"
