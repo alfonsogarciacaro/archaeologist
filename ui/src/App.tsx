@@ -1,0 +1,84 @@
+import React, { useState } from 'react';
+import Header from './components/Header';
+import DependencyGraph from './components/DependencyGraph';
+import InvestigationPanel from './components/InvestigationPanel';
+import { ImpactReport } from './types/types';
+import './App.css';
+import './index.css';
+
+const App: React.FC = () => {
+  const [impactReport, setImpactReport] = useState<ImpactReport | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleInvestigate = async (query: string) => {
+    setIsLoading(true);
+    setSelectedNode(null);
+    
+    try {
+      const response = await fetch('http://localhost:8000/investigate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Investigation failed');
+      }
+      
+      const report: ImpactReport = await response.json();
+      setImpactReport(report);
+    } catch (error) {
+      console.error('Error during investigation:', error);
+      // TODO: Show error message to user
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNode(nodeId);
+  };
+
+  const selectedNodeData = impactReport?.nodes.find(node => node.id === selectedNode);
+
+  return (
+    <div className="app">
+      <Header onInvestigate={handleInvestigate} isLoading={isLoading} />
+      
+      {impactReport?.knowledge_gaps && impactReport.knowledge_gaps.length > 0 && (
+        <div className="knowledge-gaps-banner">
+          <span className="warning-icon">⚠️</span>
+          <div className="knowledge-gap-content">
+            <strong>Knowledge Gap Identified:</strong> {impactReport.knowledge_gaps[0].missing_information}
+            <span className="required-action">Action: {impactReport.knowledge_gaps[0].required_action}</span>
+          </div>
+        </div>
+      )}
+      
+      <div className="main-content">
+        <div className="graph-container">
+          <DependencyGraph
+            report={impactReport}
+            onNodeClick={handleNodeClick}
+            selectedNodeId={selectedNode}
+          />
+        </div>
+        
+        {selectedNodeData && (
+          <div className="sidebar">
+            <InvestigationPanel node={selectedNodeData} />
+          </div>
+        )}
+      </div>
+      
+      <div className="test-status-bar">
+        Test Status: <span className="test-count">0 / 11 Tests Passing</span>
+      </div>
+    </div>
+  );
+};
+
+export default App;
