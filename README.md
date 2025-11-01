@@ -77,6 +77,31 @@ The new approach reduces memory usage by:
 
 This project follows a **Visual & Test-First** approach. See [CRUSH.md](./CRUSH.md) for the complete development philosophy and roadmap.
 
+## Telemetry Configuration
+
+The API and Scanner services are instrumented with OpenTelemetry for distributed tracing and metrics. Telemetry configuration is controlled through environment variables:
+
+```bash
+# Service identification
+OTEL_SERVICE_NAME=archaeologist-api
+OTEL_SERVICE_VERSION=1.0.0
+
+# Exporter configuration (OTLP endpoint for your telemetry collector)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+
+# Resource attributes
+OTEL_RESOURCE_ATTRIBUTES=service.name=archaeologist-api,service.version=1.0.0,deployment.environment=development
+```
+
+**Telemetry Features:**
+- **Automatic Instrumentation**: FastAPI, HTTP requests, and HTTPX calls are automatically traced
+- **Manual Instrumentation**: Key operations like investigations and scans include custom spans
+- **Error Tracking**: Failed operations are captured with detailed error information
+- **Metrics**: Ready for custom metrics collection
+
+**Note**: You'll need to configure an OTLP-compatible telemetry collector (like Jaeger, Tempo, or a commercial service) to receive the telemetry data.
+
 ## Registry Configuration
 
 The project supports configurable container registries through environment variables. Add `CONTAINER_REGISTRY` to your `.env.dev` or `.env.prod` files:

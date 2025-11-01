@@ -1,4 +1,17 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
+pydantic-settings==2.1.0
 requests==2.31.0
+
+# Telemetry
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-exporter-otlp==1.21.0
+opentelemetry-instrumentation-fastapi==0.42b0
+opentelemetry-instrumentation-requests==0.42b0
+opentelemetry-semantic-conventions==0.42b0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1

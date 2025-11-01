@@ -14,6 +14,11 @@ services:
       - LLM_API_URL=${LLM_API_URL}
       - WEB_PORT=${WEB_PORT}
       - SCANNER_PORT=${SCANNER_PORT}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME}
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL}
+      - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES}
     volumes:
       - .:/app
       - ./mock_enterprise:/app/mock_enterprise:ro
@@ -44,6 +49,15 @@ services:
     volumes:
       - ./scanner:/app
       - ./mock_enterprise:/app/mock_enterprise:ro
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
+      - SCANNER_PORT=${SCANNER_PORT}
+      - OTEL_SERVICE_NAME=archaeologist-scanner
+      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL}
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=archaeologist-scanner,service.version=${OTEL_SERVICE_VERSION},deployment.environment=${NODE_ENV}
 
 volumes:
   chromadb_data:
