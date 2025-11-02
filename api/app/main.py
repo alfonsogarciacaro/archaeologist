@@ -9,7 +9,7 @@ import sys
 import logging
 from .config import get_settings
 from .llm_interface import get_llm_provider
-from api.dependencies import get_database, close_database
+from dependencies import get_database, close_database
 
 # Add shared directory to Python path (navigate up until found)
 def find_dir_upwards(dirname: str = "shared") -> str:
@@ -71,8 +71,8 @@ from fastapi import APIRouter
 api_v1_router = APIRouter(prefix="/api/v1")
 
 # Import authentication dependencies
-from api.dependencies.auth import get_current_user_or_anonymous
-from api.models.database import User
+from dependencies.auth import get_current_user_or_anonymous
+from models.database import User
 
 class InvestigationRequest(BaseModel):
     query: str  # e.g., "Change term_sheet_id from string to UUID"

@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any, Union
 from aiosqlite import connect, Connection
 
 from .base import DatabaseAbc
-from api.models.database import (
+from models.database import (
     User, 
     Project,
     ProjectUser,

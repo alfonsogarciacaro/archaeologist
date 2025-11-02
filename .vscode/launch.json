@@ -14,6 +14,7 @@
                 "8000"
             ],
             "cwd": "${workspaceFolder}/api",
+            "python": "${workspaceFolder}/api/.venv/bin/python",
             "presentation": {
                 "group": "Archaeologist Services",
                 "order": 1
@@ -32,6 +33,7 @@
                 "8002"
             ],
             "cwd": "${workspaceFolder}/scanner",
+            "python": "${workspaceFolder}/scanner/.venv/bin/python",
             "presentation": {
                 "group": "Archaeologist Services",
                 "order": 2

@@ -11,10 +11,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .database import get_database
-from api.db import DatabaseAbc
-from api.models.database import User, InvestigationSession
-from api.app.config import get_settings
-from api.app.auth_service import auth_service
+from db import DatabaseAbc
+from models.database import User, InvestigationSession
+from app.config import get_settings
+from app.auth_service import auth_service
 
 
 security = HTTPBearer()
@@ -84,7 +84,7 @@ async def get_optional_user(
 async def get_anonymous_user() -> User:
     """Get the anonymous user for prototype access."""
     # This bypasses authentication entirely for prototype
-    from api.app.auth_service import ANONYMOUS_USER
+    from app.auth_service import ANONYMOUS_USER
     return ANONYMOUS_USER
 
 

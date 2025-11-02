@@ -11,8 +11,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 import secrets
 
-from api.app.config import get_settings
-from api.models.database import User
+from app.config import get_settings
+from models.database import User
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -107,7 +107,7 @@ ANONYMOUS_USER = User(
     id=1,
     username="anonymous",
     email="anonymous@archaeologist.local",
-    hashed_password="no_password",
+    hashed_password="$2b$12$placeholder_hash_for_anonymous_user_account_no_real_password",
     is_active=True,
     is_admin=False
 )

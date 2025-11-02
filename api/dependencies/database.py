@@ -8,8 +8,8 @@ and related utilities.
 from typing import AsyncGenerator
 from fastapi import Depends
 
-from api.db import DatabaseAbc, create_database
-from api.app.config import get_settings
+from db import DatabaseAbc, create_database
+from app.config import get_settings
 
 
 # Global database instance

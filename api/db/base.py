@@ -9,7 +9,7 @@ import abc
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
-from api.models.database import (
+from models.database import (
     User,
     Project,
     ProjectUser,

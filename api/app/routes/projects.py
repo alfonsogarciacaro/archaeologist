@@ -10,10 +10,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-from api.dependencies.auth import get_current_user
-from api.dependencies.database import get_database
-from api.db import DatabaseAbc
-from api.models.database import User, Project, ProjectUser, ProjectRole
+from dependencies.auth import get_current_user
+from dependencies.database import get_database
+from db import DatabaseAbc
+from models.database import User, Project, ProjectUser, ProjectRole
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 

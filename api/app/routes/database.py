@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
-from api.dependencies import get_database, get_current_user, get_current_admin_user
-from api.db import DatabaseAbc
-from api.models.database import (
+from dependencies import get_database, get_current_user, get_current_admin_user
+from db import DatabaseAbc
+from models.database import (
     User as DBUser,
     InvestigationStatus
 )

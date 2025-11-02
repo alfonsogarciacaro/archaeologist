@@ -3,15 +3,15 @@ from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from typing import Optional
 
-from api.app.auth_service import (
+from app.auth_service import (
     auth_service, 
     authenticate_anonymous,
     get_anonymous_token
 )
-from api.dependencies.auth import get_current_user, get_optional_user
-from api.dependencies.database import get_database
-from api.db import DatabaseAbc
-from api.models.database import User
+from dependencies.auth import get_current_user, get_optional_user
+from dependencies.database import get_database
+from db import DatabaseAbc
+from models.database import User
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
