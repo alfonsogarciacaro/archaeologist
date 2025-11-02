@@ -48,6 +48,10 @@ app.add_middleware(TracingMiddleware)
 telemetry_config.instrument_fastapi(app)
 telemetry_config.instrument_httpx()
 
+# Create API v1 router
+from fastapi import APIRouter
+api_v1_router = APIRouter(prefix="/api/v1")
+
 class InvestigationRequest(BaseModel):
     query: str  # e.g., "Change term_sheet_id from string to UUID"
 
@@ -90,7 +94,7 @@ async def root():
 async def health_check():
     return {"status": "healthy", "service": "archaeologist-api"}
 
-@app.post("/investigate", response_model=ImpactReport)
+@api_v1_router.post("/investigate", response_model=ImpactReport)
 async def investigate_change(request: InvestigationRequest):
     """
     Investigate the impact of a proposed change across the enterprise system.
@@ -184,7 +188,7 @@ async def investigate_change(request: InvestigationRequest):
         summary=f"Found 4 components potentially impacted by: {request.query}"
     )
 
-@app.get("/investigation-status")
+@api_v1_router.get("/investigation-status")
 async def investigation_status():
     """Get status of investigation components"""
     try:
@@ -213,6 +217,9 @@ async def investigation_status():
         ]
     }
 
+
+# Include the API v1 router
+app.include_router(api_v1_router)
 
 if os.getenv("NODE_ENV") != "development":
     app.mount("/static", StaticFiles(directory="ui/build/static"), name="static")

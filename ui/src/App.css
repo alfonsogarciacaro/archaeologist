@@ -60,3 +60,15 @@
   color: #3498db;
   font-weight: 600;
 }
+
+.explanation-sidebar {
+  transition: transform 0.3s ease;
+}
+
+.explanation-sidebar.show {
+  transform: translateX(0);
+}
+
+.explanation-sidebar.hide {
+  transform: translateX(100%);
+}

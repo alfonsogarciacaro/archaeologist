@@ -29,4 +29,16 @@ export interface ImpactReport {
   edges: DependencyEdge[];
   knowledge_gaps: KnowledgeGap[];
   summary: string;
+  explanation?: {
+    reasoning_steps: string[];
+    evidence_sources: Array<{
+      file: string;
+      line: number;
+      content: string;
+      confidence: number;
+    }>;
+    confidence_score: number;
+    analysis_type: string;
+  };
+  recommendations?: string[];
 }

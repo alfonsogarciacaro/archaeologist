@@ -44,6 +44,10 @@ Implementation will then be an iterative process of making the tests pass, one b
 
 > Centralize configuration in .env.dev and .env.prod files for development and production settings, respectively.
 
+> **API Versioning**: All API endpoints must use versioning with the pattern `/api/v1/endpoint`. This allows for future API evolution without breaking changes. The frontend should always use relative paths with the API version prefix (e.g., `/api/v1/investigate`).
+
+> **Design Decision Documentation**: All significant design decisions must be documented in this AGENTS.md file under a new "Design Decisions" section. This includes architectural choices, technology selections, and any deviations from standard practices. Each decision should include the rationale, alternatives considered, and the chosen approach with its benefits.
+
 ---
 
 ## 5. The Target UI: The System Impact Explorer
@@ -79,7 +83,7 @@ These user stories will be implemented as automated tests. They are our definiti
 **Backend Tests (using `pytest`):**
 
 -   `test_api_health_check`: Can the API server receive a heartbeat?
--   `test_investigate_endpoint_exists`: Does the `/investigate` endpoint exist and accept a POST request?
+-   `test_investigate_endpoint_exists`: Does the `/api/v1/investigate` endpoint exist and accept a POST request?
 -   `test_simple_literal_search`: When querying for a known string (`term_sheet_id`), the system returns the correct file (`schema.sql`) with high confidence.
 -   `test_semantic_search`: When querying for a concept (`client identifier`), the system returns semantically related files (`user-service/models.py`, `reporting-service/report_generator.js`).
 -   `test_knowledge_gap_reporting`: When a dependency points to a non-existent component, the system's final report includes a `knowledge_gaps` entry with a required action.
@@ -90,7 +94,7 @@ These user stories will be implemented as automated tests. They are our definiti
 
 -   `test_renders_header`: The header with the search bar is rendered.
 -   `test_renders_empty_graph`: On initial load, the graph area is empty.
--   `test_submit_query_calls_api`: Submitting a query triggers a `fetch` call to the `/investigate` endpoint.
+-   `test_submit_query_calls_api`: Submitting a query triggers a `fetch` call to the `/api/v1/investigate` endpoint.
 -   `test_renders_graph_from_api_response`: When the API returns a mock impact report, the UI renders the correct nodes and edges.
 -   `test_node_click_opens_sidebar`: Clicking on a node in the graph displays its details in the sidebar.
 -   `test_knowledge_gap_banner_appears`: If the API response includes `knowledge_gaps`, the banner is rendered with the correct text.
@@ -135,7 +139,7 @@ The frontend is built with modern tooling for optimal development experience and
 - **Framework**: React 18 with TypeScript
 - **Styling**: Tailwind CSS with custom theme and build-time pruning
 - **Visualization**: React Flow for the interactive dependency graph
-- **Icons**: Lucide React for consistent iconography
+- **Icons**: Lucide React for consistent iconography (the sole icon library used across all components)
 - **Testing**: Vitest with React Testing Library
 
 **Architecture Notes**:
@@ -143,6 +147,7 @@ The frontend is built with modern tooling for optimal development experience and
 - **Production**: UI is built as static assets and served by the FastAPI backend
 - **No separate container**: Frontend is not deployed as independent container service
 - **Static asset serving**: FastAPI serves the built UI from `/static` mount point
+- **Style Consistency**: All UI components use a consistent styling approach with lucide-react for icons and Tailwind CSS for styling. No mixing of UI libraries like MUI with other styling approaches.
 
 **Vite Configuration**:
 - Development server on port 3000 with API proxy to localhost:8000
@@ -166,7 +171,7 @@ The frontend is built with modern tooling for optimal development experience and
 **Phase 1: The Visual Shell & Failing Tests (3 hours)**
 - **UI:** Create the basic React components for the Header, Graph area, and Sidebar. Use `react-flow` to render an empty graph. Style with Tailwind CSS classes to achieve the final design without writing custom CSS.
 - **Frontend Tests:** Write the Vitest tests for the UI components. They will run against the static shell.
-- **Backend:** Create the FastAPI app with a placeholder `/investigate` endpoint that returns static, dummy data and serves the built UI as static assets.
+- **Backend:** Create the FastAPI app with a placeholder `/api/v1/investigate` endpoint that returns static, dummy data and serves the built UI as static assets.
 - **Backend Tests:** Write the `pytest` tests. All tests will fail because the logic is not implemented.
 
 **Phase 2: The Deterministic Core (Tool 1 & Data Ingestion)**
@@ -183,7 +188,7 @@ The frontend is built with modern tooling for optimal development experience and
 
 **Phase 4: The Trust Layer (Guardrail & Full Integration)**
 - Implement the Guardrail component.
-- Integrate it into the `/investigate` endpoint.
+- Integrate it into the `/api/v1/investigate` endpoint.
 - Make the final backend tests pass (`test_guardrail_validation`).
 - Configure FastAPI to serve the built UI as static assets.
 - Connect the real API to the React UI. Make the final frontend tests pass.
@@ -193,3 +198,40 @@ The frontend is built with modern tooling for optimal development experience and
 - Add more detail to the graph nodes and sidebar.
 - Write the final `README.md`.
 - Prepare the demo script.
+
+---
+
+## 10. Design Decisions
+
+This section documents significant architectural and implementation decisions made during the development of the Enterprise Code Archaeologist system.
+
+### 10.1 API Versioning Strategy (2025-11-02)
+
+**Decision**: Implement API versioning using the `/api/v1/` prefix for all endpoints.
+
+**Rationale**:
+- Allows for future API evolution without breaking existing clients
+- Follows REST API best practices
+- Provides clear separation between API versions
+- Enables backward compatibility when introducing breaking changes
+
+**Implementation**:
+- Backend routes are defined with `/api/v1/` prefix using FastAPI's APIRouter
+- Frontend uses relative paths (e.g., `/api/v1/investigate`) which work in both development (via Vite proxy) and production (served from same domain)
+- Vite proxy configuration handles `/api` routes to forward to the backend during development
+
+**Alternatives Considered**:
+1. No versioning initially - Rejected as it would create technical debt
+2. `/v1/` prefix only - Rejected in favor of more explicit `/api/v1/` pattern
+3. Header-based versioning - Rejected as it's less conventional and harder to debug
+
+**Benefits**:
+- Future-proof API design
+- Clear upgrade path for clients
+- Industry-standard approach
+- Easy to understand and implement
+
+**Files Modified**:
+- `ui/src/App.tsx` - Updated fetch URL to use `/api/v1/investigate`
+- `api/app/main.py` - Added APIRouter with `/api/v1` prefix
+- `ui/vite.config.ts` - Already correctly configured to proxy `/api` routes
