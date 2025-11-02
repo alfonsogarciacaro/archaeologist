@@ -17,19 +17,16 @@ from models.database import User
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT settings
-settings = get_settings()
-ALGORITHM = settings.JWT_ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-
-
 class AuthService:
     """Authentication service for JWT token management."""
     
     def __init__(self):
+        settings = get_settings()
         self.secret_key = settings.JWT_SECRET_KEY or self._generate_secret_key()
-        self.algorithm = ALGORITHM
-        self.access_token_expire_minutes = ACCESS_TOKEN_EXPIRE_MINUTES
+        self.algorithm = settings.JWT_ALGORITHM
+        self.access_token_expire_minutes = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+        self.refresh_token_expire_days = settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
+
     
     def _generate_secret_key(self) -> str:
         """Generate a secure random secret key for JWT signing."""

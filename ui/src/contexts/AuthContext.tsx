@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { tokenProvider } from '../utils/authState';
+import { apiClient } from '../utils/apiClient';
 
 interface User {
   id: number;
@@ -16,7 +17,6 @@ interface AuthContextType {
   isLoading: boolean;
   needsLogin: boolean;
   login: (username?: string, password?: string) => Promise<void>;
-  loginAnonymous: () => Promise<void>;
   logout: () => void;
   refreshToken: () => Promise<void>;
 }
@@ -40,6 +40,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const hasAttemptedAutoLogin = useRef(false);
 
   const isAuthenticated = !!user && !!token;
 
@@ -59,29 +60,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     tokenProvider.setToken(token, user);
   }, [token, user]);
 
-  const login = async (username?: string, password?: string) => {
+  const login = useCallback(async (username?: string, password?: string) => {
     try {
       setIsLoading(true);
       
-      // For prototype, we always use anonymous login
-      // In a real app, you'd send actual credentials
-      const response = await fetch('/api/v1/auth/login-anonymous', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Important for cookies
-        body: JSON.stringify({
-          username: username || 'anonymous',
-          password: password || 'anonymous'
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-
-      const data = await response.json();
+      // Use apiClient which handles baseUrl and authentication
+      const data = await apiClient.login(username || 'anonymous', password || 'anonymous');
       
       setToken(data.access_token);
       setUser(data.user);
@@ -92,47 +76,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const loginAnonymous = async () => {
-    return login('anonymous', 'anonymous');
-  };
-
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     setToken(null);
     setNeedsLogin(false);
+    hasAttemptedAutoLogin.current = false; // Reset auto-login flag on logout
     // Clear token provider
     tokenProvider.clearAuth();
-  };
+  }, []);
 
-  const refreshToken = async () => {
+  const refreshToken = useCallback(async () => {
     try {
       if (!token) {
         throw new Error('No token to refresh');
       }
 
-      const response = await fetch('/api/v1/auth/refresh', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include', // Important for cookies
-        body: JSON.stringify({
-          refresh_token: token,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Token refresh failed');
-      }
-
-      const data = await response.json();
+      // Use apiClient's built-in token refresh mechanism
+      // The apiClient will automatically handle token refresh on 401 errors
+      // For manual refresh, we can trigger a validation request
+      const data = await apiClient.validateToken();
       
-      setToken(data.access_token);
-      setUser(data.user);
-      setNeedsLogin(false);
+      // Update user data if validation succeeds
+      if (data.user) {
+        setUser(data.user);
+      }
     } catch (error) {
       console.error('Token refresh error:', error);
       // For prototype, show login page
@@ -140,14 +109,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setNeedsLogin(true);
       throw error;
     }
-  };
+  }, [token]);
 
   // Auto-login as anonymous on first visit (if not needing login)
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !needsLogin) {
-      loginAnonymous();
+    if (!isLoading && !isAuthenticated && !needsLogin && !hasAttemptedAutoLogin.current) {
+      hasAttemptedAutoLogin.current = true;
+      login();
     }
-  }, [isLoading, isAuthenticated, needsLogin]);
+  }, [isLoading, isAuthenticated, needsLogin, login]);
 
   const value: AuthContextType = {
     user,
@@ -156,7 +126,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     needsLogin,
     login,
-    loginAnonymous,
     logout,
     refreshToken,
   };

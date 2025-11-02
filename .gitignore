@@ -4,3 +4,4 @@ mcp-servers/
 build/
 .venv/
 .claude/
+*.db

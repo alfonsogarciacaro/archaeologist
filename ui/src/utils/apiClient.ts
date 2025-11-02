@@ -108,23 +108,6 @@ class ApiClient {
     return response.json();
   }
 
-  async loginAnonymous() {
-    const response = await fetch(`${this.baseUrl}/auth/login-anonymous`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username: 'anonymous', password: 'anonymous' }),
-      credentials: 'include', // Important for cookies
-    });
-
-    if (!response.ok) {
-      throw new Error('Anonymous login failed');
-    }
-
-    return response.json();
-  }
-
   async getCurrentUser() {
     const response = await this.request('/auth/me');
     

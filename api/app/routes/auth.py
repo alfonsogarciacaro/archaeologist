@@ -21,6 +21,7 @@ class TokenResponse(BaseModel):
     """JWT token response model."""
     access_token: str
     token_type: str = "bearer"
+    user: User
 
 
 class LoginRequest(BaseModel):
@@ -49,21 +50,22 @@ async def login(
     user, token = authenticate_anonymous()
     
     # Set refresh token as HttpOnly cookie (for production - prototype uses JWT only)
-    # response.set_cookie(
-    #     key="refresh_token",
-    #     value=token,  # In production, this would be separate refresh token
-    #     httponly=True,
-    #     secure=True,
-    #     samesite="strict",
-    #     max_age=30 * 24 * 60 * 60  # 30 days
-    # )
+    response.set_cookie(
+        key="refresh_token",
+        value=token,  # In production, this would be separate refresh token
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60  # Convert days to seconds
+    )
     
     # Update last login time (would normally check credentials first)
     # await db.update_user_last_login(user.id)
     
     return TokenResponse(
         access_token=token,
-        token_type="bearer"
+        token_type="bearer",
+        user=user
     )
 
 
@@ -77,18 +79,19 @@ async def login_anonymous_endpoint(response: Response):
     user, token = authenticate_anonymous()
     
     # Set refresh token as HttpOnly cookie
-    # response.set_cookie(
-    #     key="refresh_token",
-    #     value=token,
-    #     httponly=True,
-    #     secure=True,
-    #     samesite="strict",
-    #     max_age=30 * 24 * 60 * 60
-    # )
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60  # Convert days to seconds
+    )
     
     return TokenResponse(
         access_token=token,
-        token_type="bearer"
+        token_type="bearer",
+        user=user
     )
 
 
@@ -107,18 +110,19 @@ async def refresh_token(
     user, new_token = authenticate_anonymous()
     
     # Set new refresh token cookie
-    # response.set_cookie(
-    #     key="refresh_token",
-    #     value=new_token,
-    #     httponly=True,
-    #     secure=True,
-    #     samesite="strict",
-    #     max_age=30 * 24 * 60 * 60
-    # )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=auth_service.access_token_expire_minutes * 60  # Convert minutes to seconds
+    )
     
     return TokenResponse(
         access_token=new_token,
-        token_type="bearer"
+        token_type="bearer",
+        user=user
     )
 
 
@@ -189,5 +193,5 @@ async def get_public_token():
     return {
         "access_token": token,
         "token_type": "bearer",
-        "expires_in": 30 * 24 * 60 * 60  # 30 days in seconds
+        "expires_in": auth_service.access_token_expire_minutes * 60  # Use configured expiration time
     }
