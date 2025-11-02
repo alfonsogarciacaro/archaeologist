@@ -6,18 +6,17 @@ allowing easy switching between implementations (SQLite, PostgreSQL, etc.).
 """
 
 import abc
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
 from api.models.database import (
-    User, 
+    User,
     Project,
     ProjectUser,
-    ProjectRole,
-    Investigation, 
-    KnowledgeGap, 
-    SystemConfig,
-    InvestigationSession
+    Investigation,
+    KnowledgeGap,
+    InvestigationSession,
+    InvestigationStatus
 )
 
 
@@ -161,9 +160,9 @@ class DatabaseAbc(abc.ABC):
     
     @abc.abstractmethod
     async def update_investigation_status(
-        self, 
-        investigation_id: int, 
-        status: str
+        self,
+        investigation_id: int,
+        investigation_status: Union[str, InvestigationStatus]
     ) -> bool:
         """Update investigation status."""
         pass

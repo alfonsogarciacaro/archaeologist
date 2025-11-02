@@ -6,7 +6,7 @@ knowledge gaps, and system configuration.
 """
 
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
@@ -14,12 +14,7 @@ from api.dependencies import get_database, get_current_user, get_current_admin_u
 from api.db import DatabaseAbc
 from api.models.database import (
     User as DBUser,
-    Investigation,
-    KnowledgeGap,
-    InvestigationStatus,
-    KnowledgeGapType,
-    UserStats,
-    SystemStats
+    InvestigationStatus
 )
 
 
@@ -139,7 +134,7 @@ async def login(
     # Generate session token
     import secrets
     session_token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
     
     await db.create_session(
         user_id=user.id,
@@ -214,14 +209,14 @@ async def get_investigation(
 @database_router.patch("/investigations/{investigation_id}/status")
 async def update_investigation_status(
     investigation_id: int,
-    status: str,
+    investigation_status: str,
     current_user: DBUser = Depends(get_current_admin_user),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Update investigation status (admin only)."""
     try:
-        InvestigationStatus(status)  # Validate status
-        success = await db.update_investigation_status(investigation_id, status)
+        InvestigationStatus(investigation_status)  # Validate status
+        success = await db.update_investigation_status(investigation_id, investigation_status)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -231,7 +226,7 @@ async def update_investigation_status(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status: {status}"
+            detail=f"Invalid status: {investigation_status}"
         )
 
 

@@ -5,12 +5,9 @@ This module provides a lightweight SQLite implementation suitable for
 development and small-scale deployments.
 """
 
-import sqlite3
 import json
-import secrets
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
-import asyncio
+from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any, Union
 from aiosqlite import connect, Connection
 
 from .base import DatabaseAbc
@@ -18,13 +15,10 @@ from api.models.database import (
     User, 
     Project,
     ProjectUser,
-    ProjectRole,
     Investigation, 
     KnowledgeGap, 
-    SystemConfig,
     InvestigationSession,
     InvestigationStatus,
-    KnowledgeGapType,
     UserStats,
     SystemStats
 )
@@ -332,7 +326,7 @@ class SQLiteDatabase(DatabaseAbc):
         if 'repository_paths' in kwargs:
             kwargs['repository_paths'] = json.dumps(kwargs['repository_paths'])
         
-        kwargs['updated_at'] = datetime.utcnow()
+        kwargs['updated_at'] = datetime.now(timezone.utc).isoformat()
         
         set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
         values = list(kwargs.values()) + [project_id]
@@ -444,7 +438,7 @@ class SQLiteDatabase(DatabaseAbc):
             """INSERT INTO investigations 
                (user_id, project_id, query, impact_data, component_count, status, started_at) 
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, project_id, query, impact_json, component_count, InvestigationStatus.RUNNING, datetime.utcnow())
+            (user_id, project_id, query, impact_json, component_count, InvestigationStatus.RUNNING, datetime.now(timezone.utc).isoformat())
         )
         await conn.commit()
         
@@ -538,21 +532,30 @@ class SQLiteDatabase(DatabaseAbc):
         return investigations
     
     async def update_investigation_status(
-        self, 
-        investigation_id: int, 
-        status: str
+        self,
+        investigation_id: int,
+        investigation_status: Union[str, InvestigationStatus]
     ) -> bool:
         """Update investigation status."""
         conn = self._get_connection()
-        update_fields = {"status": status}
         
-        if status == InvestigationStatus.COMPLETED:
-            update_fields["completed_at"] = datetime.utcnow()
-        elif status == InvestigationStatus.FAILED:
-            update_fields["completed_at"] = datetime.utcnow()
+        # Handle both string and enum inputs
+        if isinstance(investigation_status, InvestigationStatus):
+            status_value = investigation_status.value
+            status_enum = investigation_status
+        else:
+            status_value = investigation_status
+            status_enum = InvestigationStatus(investigation_status)
+        
+        update_fields: Dict[str, Any] = {"status": status_value}
+        
+        if status_enum == InvestigationStatus.COMPLETED:
+            update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
+        elif status_enum == InvestigationStatus.FAILED:
+            update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
         
         # Calculate execution time if completed
-        if status in [InvestigationStatus.COMPLETED, InvestigationStatus.FAILED]:
+        if status_enum in [InvestigationStatus.COMPLETED, InvestigationStatus.FAILED]:
             cursor = await conn.execute(
                 "SELECT started_at FROM investigations WHERE id = ?",
                 (investigation_id,)
@@ -560,7 +563,7 @@ class SQLiteDatabase(DatabaseAbc):
             row = await cursor.fetchone()
             if row and row['started_at']:
                 started_at = datetime.fromisoformat(row['started_at'])
-                execution_time = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+                execution_time = int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000)
                 update_fields["execution_time_ms"] = execution_time
         
         # Build dynamic update query
@@ -648,7 +651,7 @@ class SQLiteDatabase(DatabaseAbc):
         await conn.execute(
             """INSERT OR REPLACE INTO system_config 
                (key, value, updated_at) VALUES (?, ?, ?)""",
-            (key, value, datetime.utcnow())
+            (key, value, datetime.now(timezone.utc).isoformat())
         )
         await conn.commit()
         return True
@@ -692,14 +695,14 @@ class SQLiteDatabase(DatabaseAbc):
             return None
             
         # Check if session has expired
-        if datetime.fromisoformat(row['expires_at']) < datetime.utcnow():
+        if datetime.fromisoformat(row['expires_at']) < datetime.now(timezone.utc):
             await self.delete_session(session_token)
             return None
         
         # Update last accessed
         await conn.execute(
             "UPDATE sessions SET last_accessed = ? WHERE session_token = ?",
-            (datetime.utcnow(), session_token)
+            (datetime.now(timezone.utc).isoformat(), session_token)
         )
         await conn.commit()
         
