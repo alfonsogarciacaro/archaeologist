@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# Production deployment script for Enterprise Code Archaeologist
-# This script builds and deploys the application in production mode
+# Deployment script for Enterprise Code Archaeologist
+# Usage: ./deploy.sh [prod]
+# If "prod" is specified, uses .env.prod, otherwise uses .env.dev
 
-echo "🚀 Deploying Enterprise Code Archaeologist in production mode..."
+# Determine which environment to use
+ENVIRONMENT=${1:-dev}
+ENV_FILE=".env.$ENVIRONMENT"
+
+echo "🚀 Deploying Enterprise Code Archaeologist in $ENVIRONMENT mode..."
 
 # Set docker command alias
 if ! command -v docker &> /dev/null && command -v podman &> /dev/null; then
@@ -16,23 +21,23 @@ if ! command -v podman-compose &> /dev/null && ! command -v docker-compose &> /d
     exit 1
 fi
 
-# Load production environment variables
-if [ -f .env.prod ]; then
-    export $(cat .env.prod | grep -v '^#' | xargs)
-    echo "✅ Loaded .env.prod"
+# Load environment variables
+if [ -f "$ENV_FILE" ]; then
+    export $(cat "$ENV_FILE" | grep -v '^#' | xargs)
+    echo "✅ Loaded $ENV_FILE"
 else
-    echo "❌ Error: .env.prod file not found!"
+    echo "❌ Error: $ENV_FILE file not found!"
     exit 1
 fi
 
-# Build and deploy in production mode
-echo "🏗️ Building and starting production services..."
+# Build and deploy
+echo "🏗️ Building and starting $ENVIRONMENT services..."
 if command -v podman-compose &> /dev/null; then
-    podman-compose --env-file .env.prod up --build -d
+    podman-compose --env-file "$ENV_FILE" up --build -d
 elif command -v docker-compose &> /dev/null; then
-    docker-compose --env-file .env.prod up --build -d
+    docker-compose --env-file "$ENV_FILE" up --build -d
 else
-    docker --env-file .env.prod compose up --build -d
+    docker --env-file "$ENV_FILE" compose up --build -d
 fi
 
 echo "✅ Application deployed successfully!"
