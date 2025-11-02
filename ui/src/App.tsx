@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { apiClient } from './utils/apiClient';
 import LoginPage from './components/LoginPage';
@@ -12,6 +12,15 @@ import FileUpload from './components/FileUpload';
 import { ImpactReport } from './types/types';
 import './App.css';
 import './index.css';
+
+export interface ProjectSource {
+  id: number;
+  original_filename: string;
+  file_size: number;
+  content_type: string;
+  metadata?: string;
+  created_at: string;
+}
 
 export interface Project {
   id: number;
@@ -33,6 +42,7 @@ const AppContent: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const [projectSources, setProjectSources] = useState<ProjectSource[]>([]);
 
   const handleInvestigate = async (query: string) => {
     setIsLoading(true);
@@ -55,14 +65,35 @@ const AppContent: React.FC = () => {
 
   const selectedNodeData = impactReport?.nodes.find(node => node.id === selectedNode);
 
+  const fetchProjectSources = async () => {
+    if (!currentProject) return;
+
+    try {
+      const sources = await apiClient.getProjectSources(currentProject.id);
+      setProjectSources(sources);
+    } catch (error) {
+      console.error('Error fetching project sources:', error);
+    }
+  };
+
   const handleFilesUploaded = () => {
     setShowFileUpload(false);
-    // Optionally trigger a refresh or update of the investigation
+    // Refresh the project sources after upload
+    fetchProjectSources();
   };
 
   const handleFileUploadClose = () => {
     setShowFileUpload(false);
   };
+
+  // Fetch project sources when the current project changes
+  useEffect(() => {
+    if (currentProject && currentView === 'investigation') {
+      fetchProjectSources();
+    } else {
+      setProjectSources([]);
+    }
+  }, [currentProject, currentView]);
 
   // Show loading screen while authentication is being initialized
   if (authLoading) {
@@ -131,6 +162,7 @@ const AppContent: React.FC = () => {
             report={impactReport}
             onNodeClick={handleNodeClick}
             selectedNodeId={selectedNode}
+            projectSources={projectSources}
           />
         </div>
         

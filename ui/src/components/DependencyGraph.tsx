@@ -12,25 +12,51 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { ImpactReport } from '../types/types';
+import { ProjectSource } from '../App';
 import './DependencyGraph.css';
 
 interface DependencyGraphProps {
   report: ImpactReport | null;
   onNodeClick: (nodeId: string) => void;
   selectedNodeId: string | null;
+  projectSources: ProjectSource[];
 }
 
 const DependencyGraph: React.FC<DependencyGraphProps> = ({
   report,
   onNodeClick,
   selectedNodeId,
+  projectSources,
 }) => {
   const { nodes, edges } = useMemo(() => {
-    if (!report) {
+    const investigationNodes = report ? report.nodes : [];
+    const allNodes = [...investigationNodes];
+
+    // Add project source nodes as disconnected nodes
+    projectSources.forEach((source, index) => {
+      // Check if this source already exists in investigation nodes
+      const existingNode = investigationNodes.find(node =>
+        node.name === source.original_filename || node.id === `source-${source.id}`
+      );
+
+      if (!existingNode) {
+        allNodes.push({
+          id: `source-${source.id}`,
+          name: source.original_filename,
+          type: 'file',
+          path: source.original_filename,
+          source_type: 'uploaded_file',
+          confidence: 1.0, // Uploaded files have 100% confidence
+          last_updated: source.created_at,
+        });
+      }
+    });
+
+    if (allNodes.length === 0) {
       return { nodes: [], edges: [] };
     }
 
-    const nodes: Node[] = report.nodes.map((node, index) => {
+    const nodes: Node[] = allNodes.map((node, index) => {
       const getPosition = (index: number, total: number) => {
         const angle = (index / total) * 2 * Math.PI;
         const radius = 200;
@@ -42,7 +68,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
         };
       };
 
-      const position = getPosition(index, report.nodes.length);
+      const position = getPosition(index, allNodes.length);
       
       return {
         id: node.id,
@@ -68,7 +94,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
       };
     });
 
-    const edges: Edge[] = report.edges.map((edge) => ({
+    const edges: Edge[] = report ? report.edges.map((edge) => ({
       id: `${edge.source}-${edge.target}`,
       source: edge.source,
       target: edge.target,
@@ -83,10 +109,10 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
         type: MarkerType.ArrowClosed,
         color: getEdgeColor(edge.relationship_type, edge.confidence),
       },
-    }));
+    })) : [];
 
     return { nodes, edges };
-  }, [report, selectedNodeId]);
+  }, [report, selectedNodeId, projectSources]);
 
   const [flowNodes, setNodes, onNodesChange] = useNodesState(nodes);
   const [flowEdges, setEdges, onEdgesChange] = useEdgesState(edges);
@@ -103,7 +129,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
     onNodeClick(node.id);
   };
 
-  if (!report) {
+  if (!report && projectSources.length === 0) {
     return (
       <div className="empty-graph">
         <div className="empty-state">
@@ -113,6 +139,8 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
       </div>
     );
   }
+
+  // Don't return empty state for sources - let them render as disconnected nodes in the graph
 
   return (
     <div className="dependency-graph" data-testid="react-flow">
@@ -143,6 +171,7 @@ function getNodeIcon(type: string): string {
     repo: '📁',
     file: '📄',
     api_endpoint: '🔌',
+    uploaded_file: '📎', // Different icon for uploaded files
   };
   return icons[type] || '📦';
 }
@@ -153,6 +182,7 @@ function getNodeColor(type: string, confidence: number): string {
     repo: '#3498db',
     file: '#f39c12',
     api_endpoint: '#9b59b6',
+    uploaded_file: '#27ae60', // Green color for uploaded files
   };
   
   const opacity = 0.3 + (confidence * 0.7);
