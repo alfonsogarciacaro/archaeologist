@@ -2,7 +2,9 @@ services:
   api:
     build: 
       context: .
-      dockerfile: Dockerfile
+      dockerfile: api/Dockerfile
+      args:
+        CONTAINER_REGISTRY: ${CONTAINER_REGISTRY}
     ports:
       - "${WEB_PORT}:8000"
     environment:
@@ -43,6 +45,8 @@ services:
     build: 
       context: .
       dockerfile: scanner/Dockerfile
+      args:
+        CONTAINER_REGISTRY: ${CONTAINER_REGISTRY}
     ports:
       - "${SCANNER_PORT}:8000"
     volumes:

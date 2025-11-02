@@ -37,6 +37,12 @@ class SQLiteDatabase(DatabaseAbc):
         self.db_path = db_path
         self._conn: Optional[Connection] = None
     
+    def _get_connection(self) -> Connection:
+        """Get the database connection, raising an error if not initialized."""
+        if self._conn is None:
+            raise RuntimeError("Database connection not initialized. Call initialize() first.")
+        return self._conn
+    
     async def initialize(self) -> None:
         """Initialize SQLite database and create tables."""
         self._conn = await connect(self.db_path)
@@ -57,9 +63,10 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def _create_tables(self) -> None:
         """Create all necessary database tables."""
+        conn = self._get_connection()
         
         # Users table
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
@@ -73,7 +80,7 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # Projects table
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -88,7 +95,7 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # Project users table (many-to-many relationship)
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS project_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_id INTEGER NOT NULL,
@@ -103,7 +110,7 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # Investigations table
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS investigations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -123,7 +130,7 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # Knowledge gaps table
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS knowledge_gaps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 investigation_id INTEGER NOT NULL,
@@ -140,7 +147,7 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # System config table
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS system_config (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
@@ -152,7 +159,7 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # Sessions table
-        await self._conn.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -166,21 +173,22 @@ class SQLiteDatabase(DatabaseAbc):
         """)
         
         # Create indexes for performance
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_user_id ON investigations (user_id)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_project_id ON investigations (project_id)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_status ON investigations (status)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_gaps_investigation_id ON knowledge_gaps (investigation_id)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (session_token)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_created_by ON projects (created_by)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects (is_active)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_project_id ON project_users (project_id)")
-        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_user_id ON project_users (user_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_user_id ON investigations (user_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_project_id ON investigations (project_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_status ON investigations (status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_gaps_investigation_id ON knowledge_gaps (investigation_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (session_token)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_created_by ON projects (created_by)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects (is_active)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_project_id ON project_users (project_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_user_id ON project_users (user_id)")
         
-        await self._conn.commit()
+        await conn.commit()
     
     async def _insert_default_config(self) -> None:
         """Insert default system configuration."""
+        conn = self._get_connection()
         default_configs = [
             ("max_investigation_time_seconds", "300", "Maximum time for investigation execution", False),
             ("max_components_per_investigation", "100", "Maximum components to analyze", False),
@@ -195,18 +203,27 @@ class SQLiteDatabase(DatabaseAbc):
     # User management
     async def create_user(self, username: str, email: str, hashed_password: str) -> User:
         """Create a new user."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
             (username, email, hashed_password)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         user_id = cursor.lastrowid
-        return await self.get_user_by_id(user_id)
+        if user_id is None:
+            raise RuntimeError("Failed to retrieve last inserted user ID.")
+
+        user = await self.get_user_by_id(user_id)
+        if user is None:
+            raise RuntimeError("Failed to retrieve user after creation.")
+        
+        return user
     
     async def get_user_by_username(self, username: str) -> Optional[User]:
         """Get user by username."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM users WHERE username = ?",
             (username,)
         )
@@ -215,7 +232,8 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM users WHERE id = ?",
             (user_id,)
         )
@@ -224,7 +242,8 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM users WHERE email = ?",
             (email,)
         )
@@ -240,25 +259,33 @@ class SQLiteDatabase(DatabaseAbc):
         created_by: int
     ) -> Project:
         """Create a new project."""
+        conn = self._get_connection()
         repo_paths_json = json.dumps(repository_paths) if repository_paths else None
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             """INSERT INTO projects 
                (name, description, repository_paths, created_by) 
                VALUES (?, ?, ?, ?)""",
             (name, description, repo_paths_json, created_by)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         project_id = cursor.lastrowid
+        if project_id is None:
+            raise RuntimeError("Failed to retrieve last inserted project ID.")
         
         # Add creator as project owner
         await self.add_user_to_project(project_id, created_by, "owner")
         
-        return await self.get_project_by_id(project_id)
+        project = await self.get_project_by_id(project_id)
+        if project is None:
+            raise RuntimeError("Failed to retrieve project after creation.")
+        
+        return project
     
     async def get_project_by_id(self, project_id: int) -> Optional[Project]:
         """Get project by ID."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM projects WHERE id = ?",
             (project_id,)
         )
@@ -275,7 +302,8 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def get_user_projects(self, user_id: int) -> List[Project]:
         """Get all projects accessible to a user."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             """SELECT p.* FROM projects p
                JOIN project_users pu ON p.id = pu.project_id
                WHERE pu.user_id = ? AND pu.is_active = TRUE AND p.is_active = TRUE
@@ -298,6 +326,8 @@ class SQLiteDatabase(DatabaseAbc):
         if not kwargs:
             return True
         
+        conn = self._get_connection()
+        
         # Handle JSON field
         if 'repository_paths' in kwargs:
             kwargs['repository_paths'] = json.dumps(kwargs['repository_paths'])
@@ -307,21 +337,22 @@ class SQLiteDatabase(DatabaseAbc):
         set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
         values = list(kwargs.values()) + [project_id]
         
-        await self._conn.execute(
+        await conn.execute(
             f"UPDATE projects SET {set_clause} WHERE id = ?",
             values
         )
-        await self._conn.commit()
+        await conn.commit()
         
         return True
     
     async def delete_project(self, project_id: int) -> bool:
         """Delete a project."""
-        await self._conn.execute(
+        conn = self._get_connection()
+        await conn.execute(
             "UPDATE projects SET is_active = FALSE WHERE id = ?",
             (project_id,)
         )
-        await self._conn.commit()
+        await conn.commit()
         return True
     
     # Project user management
@@ -332,33 +363,39 @@ class SQLiteDatabase(DatabaseAbc):
         role: str
     ) -> ProjectUser:
         """Add a user to a project with a specific role."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "INSERT OR REPLACE INTO project_users (project_id, user_id, role) VALUES (?, ?, ?)",
             (project_id, user_id, role)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         project_user_id = cursor.lastrowid
         
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT * FROM project_users WHERE id = ?",
             (project_user_id,)
         )
         row = await cursor.fetchone()
+        if not row:
+            raise RuntimeError("Failed to retrieve project user after addition.")
+
         return ProjectUser(**row)
     
     async def remove_user_from_project(self, project_id: int, user_id: int) -> bool:
         """Remove a user from a project."""
-        await self._conn.execute(
+        conn = self._get_connection()
+        await conn.execute(
             "UPDATE project_users SET is_active = FALSE WHERE project_id = ? AND user_id = ?",
             (project_id, user_id)
         )
-        await self._conn.commit()
+        await conn.commit()
         return True
     
     async def get_project_users(self, project_id: int) -> List[ProjectUser]:
         """Get all users in a project."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM project_users WHERE project_id = ? AND is_active = TRUE",
             (project_id,)
         )
@@ -367,7 +404,8 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def get_user_project_role(self, project_id: int, user_id: int) -> Optional[str]:
         """Get a user's role in a specific project."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT role FROM project_users WHERE project_id = ? AND user_id = ? AND is_active = TRUE",
             (project_id, user_id)
         )
@@ -381,11 +419,12 @@ class SQLiteDatabase(DatabaseAbc):
         role: str
     ) -> bool:
         """Update a user's role in a project."""
-        await self._conn.execute(
+        conn = self._get_connection()
+        await conn.execute(
             "UPDATE project_users SET role = ? WHERE project_id = ? AND user_id = ?",
             (role, project_id, user_id)
         )
-        await self._conn.commit()
+        await conn.commit()
         return True
     
     # Investigation management
@@ -397,23 +436,32 @@ class SQLiteDatabase(DatabaseAbc):
         project_id: Optional[int] = None
     ) -> Investigation:
         """Create a new investigation record."""
+        conn = self._get_connection()
         impact_json = json.dumps(impact_data) if impact_data else None
         component_count = len(impact_data.get('components', [])) if impact_data else 0
         
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             """INSERT INTO investigations 
                (user_id, project_id, query, impact_data, component_count, status, started_at) 
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (user_id, project_id, query, impact_json, component_count, InvestigationStatus.RUNNING, datetime.utcnow())
         )
-        await self._conn.commit()
+        await conn.commit()
         
         investigation_id = cursor.lastrowid
-        return await self.get_investigation_by_id(investigation_id)
+        if investigation_id is None:
+            raise RuntimeError("Failed to retrieve last inserted investigation ID.")
+        
+        investigation = await self.get_investigation_by_id(investigation_id)
+        if investigation is None:
+            raise RuntimeError("Failed to retrieve investigation after creation.")
+        
+        return investigation
     
     async def get_investigation_by_id(self, investigation_id: int) -> Optional[Investigation]:
         """Get investigation by ID."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM investigations WHERE id = ?",
             (investigation_id,)
         )
@@ -436,8 +484,9 @@ class SQLiteDatabase(DatabaseAbc):
         limit: int = 10
     ) -> List[Investigation]:
         """Get user's recent investigations, optionally filtered by project."""
+        conn = self._get_connection()
         if project_id:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 """SELECT * FROM investigations 
                    WHERE user_id = ? AND project_id = ?
                    ORDER BY created_at DESC 
@@ -445,7 +494,7 @@ class SQLiteDatabase(DatabaseAbc):
                 (user_id, project_id, limit)
             )
         else:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 """SELECT * FROM investigations 
                    WHERE user_id = ? 
                    ORDER BY created_at DESC 
@@ -469,31 +518,8 @@ class SQLiteDatabase(DatabaseAbc):
         limit: int = 10
     ) -> List[Investigation]:
         """Get investigations for a specific project."""
-        cursor = await self._conn.execute(
-            """SELECT * FROM investigations 
-               WHERE project_id = ?
-               ORDER BY created_at DESC 
-               LIMIT ?""",
-            (project_id, limit)
-        )
-        rows = await cursor.fetchall()
-        
-        investigations = []
-        for row in rows:
-            data = dict(row)
-            if data['impact_data']:
-                data['impact_data'] = json.loads(data['impact_data'])
-            investigations.append(Investigation(**data))
-        
-        return investigations
-    
-    async def get_project_investigations(
-        self, 
-        project_id: int, 
-        limit: int = 10
-    ) -> List[Investigation]:
-        """Get investigations for a specific project."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             """SELECT * FROM investigations 
                WHERE project_id = ?
                ORDER BY created_at DESC 
@@ -517,6 +543,7 @@ class SQLiteDatabase(DatabaseAbc):
         status: str
     ) -> bool:
         """Update investigation status."""
+        conn = self._get_connection()
         update_fields = {"status": status}
         
         if status == InvestigationStatus.COMPLETED:
@@ -526,7 +553,7 @@ class SQLiteDatabase(DatabaseAbc):
         
         # Calculate execution time if completed
         if status in [InvestigationStatus.COMPLETED, InvestigationStatus.FAILED]:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT started_at FROM investigations WHERE id = ?",
                 (investigation_id,)
             )
@@ -540,11 +567,11 @@ class SQLiteDatabase(DatabaseAbc):
         set_clause = ", ".join([f"{k} = ?" for k in update_fields.keys()])
         values = list(update_fields.values()) + [investigation_id]
         
-        await self._conn.execute(
+        await conn.execute(
             f"UPDATE investigations SET {set_clause} WHERE id = ?",
             values
         )
-        await self._conn.commit()
+        await conn.commit()
         
         return True
     
@@ -558,18 +585,19 @@ class SQLiteDatabase(DatabaseAbc):
         suggested_action: str
     ) -> KnowledgeGap:
         """Create a knowledge gap record."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             """INSERT INTO knowledge_gaps 
                (investigation_id, component_name, gap_type, description, suggested_action) 
                VALUES (?, ?, ?, ?, ?)""",
             (investigation_id, component_name, gap_type, description, suggested_action)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         knowledge_gap_id = cursor.lastrowid
         
         # Update investigation gap count
-        await self._conn.execute(
+        await conn.execute(
             """UPDATE investigations 
                SET knowledge_gap_count = (
                    SELECT COUNT(*) FROM knowledge_gaps 
@@ -578,14 +606,16 @@ class SQLiteDatabase(DatabaseAbc):
                WHERE id = ?""",
             (investigation_id, investigation_id)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         # Return the created gap
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT * FROM knowledge_gaps WHERE id = ?",
             (knowledge_gap_id,)
         )
         row = await cursor.fetchone()
+        if not row:
+            raise RuntimeError("Failed to retrieve knowledge gap after creation.")
         return KnowledgeGap(**row)
     
     async def get_investigation_knowledge_gaps(
@@ -593,7 +623,8 @@ class SQLiteDatabase(DatabaseAbc):
         investigation_id: int
     ) -> List[KnowledgeGap]:
         """Get knowledge gaps for an investigation."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM knowledge_gaps WHERE investigation_id = ? ORDER BY created_at DESC",
             (investigation_id,)
         )
@@ -603,7 +634,8 @@ class SQLiteDatabase(DatabaseAbc):
     # System configuration
     async def get_config_value(self, key: str) -> Optional[str]:
         """Get configuration value."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT value FROM system_config WHERE key = ?",
             (key,)
         )
@@ -612,12 +644,13 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def set_config_value(self, key: str, value: str) -> bool:
         """Set configuration value."""
-        await self._conn.execute(
+        conn = self._get_connection()
+        await conn.execute(
             """INSERT OR REPLACE INTO system_config 
                (key, value, updated_at) VALUES (?, ?, ?)""",
             (key, value, datetime.utcnow())
         )
-        await self._conn.commit()
+        await conn.commit()
         return True
     
     # Session management
@@ -628,20 +661,28 @@ class SQLiteDatabase(DatabaseAbc):
         expires_at: datetime
     ) -> InvestigationSession:
         """Create a user session."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             """INSERT INTO sessions 
                (user_id, session_token, expires_at) 
                VALUES (?, ?, ?)""",
             (user_id, session_token, expires_at)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         session_id = cursor.lastrowid
-        return await self.get_session_by_token(session_token)
-    
+        if session_id is None:
+            raise RuntimeError("Failed to retrieve last inserted session ID.")
+        session = await self.get_session_by_token(session_token)
+        if session is None:
+            raise RuntimeError("Failed to retrieve session after creation.")
+
+        return session
+
     async def get_session_by_token(self, session_token: str) -> Optional[InvestigationSession]:
         """Get session by token."""
-        cursor = await self._conn.execute(
+        conn = self._get_connection()
+        cursor = await conn.execute(
             "SELECT * FROM sessions WHERE session_token = ? AND is_active = TRUE",
             (session_token,)
         )
@@ -656,62 +697,67 @@ class SQLiteDatabase(DatabaseAbc):
             return None
         
         # Update last accessed
-        await self._conn.execute(
+        await conn.execute(
             "UPDATE sessions SET last_accessed = ? WHERE session_token = ?",
             (datetime.utcnow(), session_token)
         )
-        await self._conn.commit()
+        await conn.commit()
         
         return InvestigationSession(**row)
     
     async def delete_session(self, session_token: str) -> bool:
         """Delete session."""
-        await self._conn.execute(
+        conn = self._get_connection()
+        await conn.execute(
             "UPDATE sessions SET is_active = FALSE WHERE session_token = ?",
             (session_token,)
         )
-        await self._conn.commit()
+        await conn.commit()
         return True
     
     # Analytics
     async def get_user_stats(self, user_id: int, project_id: Optional[int] = None) -> Dict[str, Any]:
         """Get user statistics, optionally filtered by project."""
+        conn = self._get_connection()
+        
         # Total investigations
         if project_id:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND project_id = ?",
                 (user_id, project_id)
             )
         else:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT COUNT(*) as count FROM investigations WHERE user_id = ?",
                 (user_id,)
             )
-        total_investigations = (await cursor.fetchone())['count']
+        row = await cursor.fetchone()
+        total_investigations = row['count'] if row else 0
         
         # Completed investigations
         if project_id:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND project_id = ? AND status = ?",
                 (user_id, project_id, InvestigationStatus.COMPLETED)
             )
         else:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND status = ?",
                 (user_id, InvestigationStatus.COMPLETED)
             )
-        completed_investigations = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        completed_investigations = row['count'] if row else 0
+
         # Average execution time
         if project_id:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 """SELECT AVG(execution_time_ms) as avg_time 
                    FROM investigations 
                    WHERE user_id = ? AND project_id = ? AND execution_time_ms IS NOT NULL""",
                 (user_id, project_id)
             )
         else:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 """SELECT AVG(execution_time_ms) as avg_time 
                    FROM investigations 
                    WHERE user_id = ? AND execution_time_ms IS NOT NULL""",
@@ -722,7 +768,7 @@ class SQLiteDatabase(DatabaseAbc):
         
         # Knowledge gaps identified
         if project_id:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 """SELECT COUNT(*) as count 
                    FROM knowledge_gaps kg
                    JOIN investigations i ON kg.investigation_id = i.id
@@ -730,23 +776,24 @@ class SQLiteDatabase(DatabaseAbc):
                 (user_id, project_id)
             )
         else:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 """SELECT COUNT(*) as count 
                    FROM knowledge_gaps kg
                    JOIN investigations i ON kg.investigation_id = i.id
                    WHERE i.user_id = ?""",
                 (user_id,)
             )
-        knowledge_gaps = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        knowledge_gaps = row['count'] if row else 0
+
         # Last investigation date
         if project_id:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT MAX(created_at) as last_date FROM investigations WHERE user_id = ? AND project_id = ?",
                 (user_id, project_id)
             )
         else:
-            cursor = await self._conn.execute(
+            cursor = await conn.execute(
                 "SELECT MAX(created_at) as last_date FROM investigations WHERE user_id = ?",
                 (user_id,)
             )
@@ -759,36 +806,41 @@ class SQLiteDatabase(DatabaseAbc):
             avg_execution_time_ms=avg_execution_time,
             knowledge_gaps_identified=knowledge_gaps,
             last_investigation_date=last_investigation
-        ).dict()
+        ).model_dump()
     
     async def get_project_stats(self, project_id: int) -> Dict[str, Any]:
         """Get project-specific statistics."""
+        conn = self._get_connection()
+        
         # Total investigations
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT COUNT(*) as count FROM investigations WHERE project_id = ?",
             (project_id,)
         )
-        total_investigations = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        total_investigations = row['count'] if row else 0
+
         # Active investigations
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT COUNT(*) as count FROM investigations WHERE project_id = ? AND status = ?",
             (project_id, InvestigationStatus.RUNNING)
         )
-        active_investigations = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        active_investigations = row['count'] if row else 0
+
         # Knowledge gaps
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             """SELECT COUNT(*) as count 
                FROM knowledge_gaps kg
                JOIN investigations i ON kg.investigation_id = i.id
                WHERE i.project_id = ?""",
             (project_id,)
         )
-        total_knowledge_gaps = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        total_knowledge_gaps = row['count'] if row else 0
+
         # Average investigation time
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             """SELECT AVG(execution_time_ms) as avg_time 
                FROM investigations 
                WHERE project_id = ? AND execution_time_ms IS NOT NULL""",
@@ -798,12 +850,13 @@ class SQLiteDatabase(DatabaseAbc):
         avg_investigation_time = avg_time_row['avg_time'] if avg_time_row else None
         
         # Project users
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT COUNT(*) as count FROM project_users WHERE project_id = ? AND is_active = TRUE",
             (project_id,)
         )
-        total_users = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        total_users = row['count'] if row else 0
+
         return {
             "total_investigations": total_investigations,
             "active_investigations": active_investigations,
@@ -814,28 +867,34 @@ class SQLiteDatabase(DatabaseAbc):
     
     async def get_system_stats(self) -> Dict[str, Any]:
         """Get system-wide statistics."""
+        conn = self._get_connection()
+        
         # Total users
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT COUNT(*) as count FROM users WHERE is_active = TRUE"
         )
-        total_users = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        total_users = row['count'] if row else 0
+
         # Total and active investigations
-        cursor = await self._conn.execute("SELECT COUNT(*) as count FROM investigations")
-        total_investigations = (await cursor.fetchone())['count']
+        cursor = await conn.execute("SELECT COUNT(*) as count FROM investigations")
+        row = await cursor.fetchone()
+        total_investigations = row['count'] if row else 0
         
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT COUNT(*) as count FROM investigations WHERE status = ?",
             (InvestigationStatus.RUNNING,)
         )
-        active_investigations = (await cursor.fetchone())['count']
-        
+        row = await cursor.fetchone()
+        active_investigations = row['count'] if row else 0
+
         # Knowledge gaps
-        cursor = await self._conn.execute("SELECT COUNT(*) as count FROM knowledge_gaps")
-        total_knowledge_gaps = (await cursor.fetchone())['count']
+        cursor = await conn.execute("SELECT COUNT(*) as count FROM knowledge_gaps")
+        row = await cursor.fetchone()
+        total_knowledge_gaps = row['count'] if row else 0
         
         # Average investigation time
-        cursor = await self._conn.execute(
+        cursor = await conn.execute(
             "SELECT AVG(execution_time_ms) as avg_time FROM investigations WHERE execution_time_ms IS NOT NULL"
         )
         avg_time_row = await cursor.fetchone()
@@ -848,4 +907,4 @@ class SQLiteDatabase(DatabaseAbc):
             total_knowledge_gaps=total_knowledge_gaps,
             avg_investigation_time_ms=avg_investigation_time,
             most_quied_components=None  # TODO: Implement component frequency analysis
-        ).dict()
+        ).model_dump()

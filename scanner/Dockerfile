@@ -1,5 +1,6 @@
 # Must be run with root dir as path context
 
+ARG CONTAINER_REGISTRY
 FROM ${CONTAINER_REGISTRY}/ubi9/python-311
 
 WORKDIR /app
