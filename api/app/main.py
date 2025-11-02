@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
@@ -8,6 +9,7 @@ import sys
 import logging
 from .config import get_settings
 from .llm_interface import get_llm_provider
+from api.dependencies import get_database, close_database
 
 # Add shared directory to Python path (navigate up until found)
 def find_dir_upwards(dirname: str = "shared") -> str:
@@ -39,7 +41,23 @@ telemetry_config = initialize_telemetry(settings)
 # Get tracer for manual instrumentation
 tracer = get_tracer(__name__)
 
-app = FastAPI(title="Enterprise Code Archaeologist API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events."""
+    # Startup
+    logger.info("Starting Enterprise Code Archaeologist API")
+    yield
+    # Shutdown
+    logger.info("Shutting down application")
+    await close_database()
+
+
+app = FastAPI(
+    title="Enterprise Code Archaeologist API", 
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # Add automatic tracing middleware
 app.add_middleware(TracingMiddleware)
@@ -236,6 +254,10 @@ async def investigation_status():
 
 # Include the API v1 router
 app.include_router(api_v1_router)
+
+# Include database router
+from .routes.database import database_router
+app.include_router(database_router)
 
 if os.getenv("NODE_ENV") != "development":
     app.mount("/static", StaticFiles(directory="ui/build/static"), name="static")

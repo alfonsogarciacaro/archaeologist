@@ -44,6 +44,10 @@ class Settings:
         if self.LLM_API_URL is None:
             raise ValueError("LLM_API_URL environment variable is required")
         
+        # Database Configuration
+        self.database_url = os.getenv("DATABASE_URL", "sqlite:///archaeologist.db")
+        self.database_type = os.getenv("DATABASE_TYPE", "sqlite")
+        
         # Telemetry Configuration
         self.OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "archaeologist-api")
         self.OTEL_SERVICE_VERSION = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")
