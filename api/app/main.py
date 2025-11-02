@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
@@ -70,6 +70,10 @@ telemetry_config.instrument_httpx()
 from fastapi import APIRouter
 api_v1_router = APIRouter(prefix="/api/v1")
 
+# Import authentication dependencies
+from api.dependencies.auth import get_current_user_or_anonymous
+from api.models.database import User
+
 class InvestigationRequest(BaseModel):
     query: str  # e.g., "Change term_sheet_id from string to UUID"
 
@@ -113,7 +117,10 @@ async def health_check():
     return {"status": "healthy", "service": "archaeologist-api"}
 
 @api_v1_router.post("/investigate", response_model=ImpactReport)
-async def investigate_change(request: InvestigationRequest):
+async def investigate_change(
+    request: InvestigationRequest,
+    current_user: User = Depends(get_current_user_or_anonymous)
+):
     """
     Investigate the impact of a proposed change across the enterprise system.
     
@@ -258,6 +265,12 @@ app.include_router(api_v1_router)
 # Include database router
 from .routes.database import database_router
 app.include_router(database_router)
+
+# Include authentication and project routes
+from .routes.auth import router as auth_router
+from .routes.projects import router as projects_router
+app.include_router(auth_router)
+app.include_router(projects_router)
 
 if os.getenv("NODE_ENV") != "development":
     app.mount("/static", StaticFiles(directory="ui/build/static"), name="static")

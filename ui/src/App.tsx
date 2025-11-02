@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { apiClient } from './utils/apiClient';
+import LoginPage from './components/LoginPage';
 import Header from './components/Header';
 import DependencyGraph from './components/DependencyGraph';
 import InvestigationPanel from './components/InvestigationPanel';
@@ -8,7 +11,8 @@ import { ImpactReport } from './types/types';
 import './App.css';
 import './index.css';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { isAuthenticated, isLoading: authLoading, needsLogin } = useAuth();
   const [impactReport, setImpactReport] = useState<ImpactReport | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,19 +23,7 @@ const App: React.FC = () => {
     setSelectedNode(null);
     
     try {
-      const response = await fetch('/api/v1/investigate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Investigation failed');
-      }
-      
-      const report: ImpactReport = await response.json();
+      const report = await apiClient.investigate(query);
       setImpactReport(report);
     } catch (error) {
       console.error('Error during investigation:', error);
@@ -46,6 +38,39 @@ const App: React.FC = () => {
   };
 
   const selectedNodeData = impactReport?.nodes.find(node => node.id === selectedNode);
+
+  // Show loading screen while authentication is being initialized
+  if (authLoading) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-content">
+          <h2>Initializing Enterprise Code Archaeologist...</h2>
+          <div className="loading-spinner"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login screen if authentication failed and needs login
+  if (needsLogin) {
+    return (
+      <div className="app login-screen">
+        <LoginPage />
+      </div>
+    );
+  }
+
+  // Show loading screen while logging in
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-content">
+          <h2>Initializing your secure session...</h2>
+          <div className="loading-spinner"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -90,6 +115,14 @@ const App: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };
 

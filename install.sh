@@ -15,4 +15,4 @@ fi
 echo "📦 Installing dependencies..."
 cd api && uv sync --locked && cd ..
 cd scanner && uv sync --locked && cd ..
-cd ui && npm install && cd ..
+cd ui && npm ci && cd ..

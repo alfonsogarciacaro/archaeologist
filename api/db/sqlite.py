@@ -16,6 +16,9 @@ from aiosqlite import connect, Connection
 from .base import DatabaseAbc
 from api.models.database import (
     User, 
+    Project,
+    ProjectUser,
+    ProjectRole,
     Investigation, 
     KnowledgeGap, 
     SystemConfig,
@@ -69,11 +72,42 @@ class SQLiteDatabase(DatabaseAbc):
             )
         """)
         
+        # Projects table
+        await self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                repository_paths TEXT,  -- JSON array of repository paths
+                is_active BOOLEAN DEFAULT TRUE,
+                created_by INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Project users table (many-to-many relationship)
+        await self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(project_id, user_id),
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+        
         # Investigations table
         await self._conn.execute("""
             CREATE TABLE IF NOT EXISTS investigations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
+                project_id INTEGER,
                 query TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
                 impact_data TEXT,
@@ -83,7 +117,8 @@ class SQLiteDatabase(DatabaseAbc):
                 started_at TIMESTAMP,
                 completed_at TIMESTAMP,
                 execution_time_ms INTEGER,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
             )
         """)
         
@@ -132,10 +167,15 @@ class SQLiteDatabase(DatabaseAbc):
         
         # Create indexes for performance
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_user_id ON investigations (user_id)")
+        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_project_id ON investigations (project_id)")
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_status ON investigations (status)")
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_gaps_investigation_id ON knowledge_gaps (investigation_id)")
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (session_token)")
         await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)")
+        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_created_by ON projects (created_by)")
+        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects (is_active)")
+        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_project_id ON project_users (project_id)")
+        await self._conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_user_id ON project_users (user_id)")
         
         await self._conn.commit()
     
@@ -182,12 +222,179 @@ class SQLiteDatabase(DatabaseAbc):
         row = await cursor.fetchone()
         return User(**row) if row else None
     
+    async def get_user_by_email(self, email: str) -> Optional[User]:
+        """Get user by email."""
+        cursor = await self._conn.execute(
+            "SELECT * FROM users WHERE email = ?",
+            (email,)
+        )
+        row = await cursor.fetchone()
+        return User(**row) if row else None
+    
+    # Project management
+    async def create_project(
+        self, 
+        name: str, 
+        description: Optional[str], 
+        repository_paths: Optional[List[str]], 
+        created_by: int
+    ) -> Project:
+        """Create a new project."""
+        repo_paths_json = json.dumps(repository_paths) if repository_paths else None
+        cursor = await self._conn.execute(
+            """INSERT INTO projects 
+               (name, description, repository_paths, created_by) 
+               VALUES (?, ?, ?, ?)""",
+            (name, description, repo_paths_json, created_by)
+        )
+        await self._conn.commit()
+        
+        project_id = cursor.lastrowid
+        
+        # Add creator as project owner
+        await self.add_user_to_project(project_id, created_by, "owner")
+        
+        return await self.get_project_by_id(project_id)
+    
+    async def get_project_by_id(self, project_id: int) -> Optional[Project]:
+        """Get project by ID."""
+        cursor = await self._conn.execute(
+            "SELECT * FROM projects WHERE id = ?",
+            (project_id,)
+        )
+        row = await cursor.fetchone()
+        
+        if not row:
+            return None
+        
+        data = dict(row)
+        if data['repository_paths']:
+            data['repository_paths'] = json.loads(data['repository_paths'])
+        
+        return Project(**data)
+    
+    async def get_user_projects(self, user_id: int) -> List[Project]:
+        """Get all projects accessible to a user."""
+        cursor = await self._conn.execute(
+            """SELECT p.* FROM projects p
+               JOIN project_users pu ON p.id = pu.project_id
+               WHERE pu.user_id = ? AND pu.is_active = TRUE AND p.is_active = TRUE
+               ORDER BY p.updated_at DESC""",
+            (user_id,)
+        )
+        rows = await cursor.fetchall()
+        
+        projects = []
+        for row in rows:
+            data = dict(row)
+            if data['repository_paths']:
+                data['repository_paths'] = json.loads(data['repository_paths'])
+            projects.append(Project(**data))
+        
+        return projects
+    
+    async def update_project(self, project_id: int, **kwargs) -> bool:
+        """Update project details."""
+        if not kwargs:
+            return True
+        
+        # Handle JSON field
+        if 'repository_paths' in kwargs:
+            kwargs['repository_paths'] = json.dumps(kwargs['repository_paths'])
+        
+        kwargs['updated_at'] = datetime.utcnow()
+        
+        set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
+        values = list(kwargs.values()) + [project_id]
+        
+        await self._conn.execute(
+            f"UPDATE projects SET {set_clause} WHERE id = ?",
+            values
+        )
+        await self._conn.commit()
+        
+        return True
+    
+    async def delete_project(self, project_id: int) -> bool:
+        """Delete a project."""
+        await self._conn.execute(
+            "UPDATE projects SET is_active = FALSE WHERE id = ?",
+            (project_id,)
+        )
+        await self._conn.commit()
+        return True
+    
+    # Project user management
+    async def add_user_to_project(
+        self, 
+        project_id: int, 
+        user_id: int, 
+        role: str
+    ) -> ProjectUser:
+        """Add a user to a project with a specific role."""
+        cursor = await self._conn.execute(
+            "INSERT OR REPLACE INTO project_users (project_id, user_id, role) VALUES (?, ?, ?)",
+            (project_id, user_id, role)
+        )
+        await self._conn.commit()
+        
+        project_user_id = cursor.lastrowid
+        
+        cursor = await self._conn.execute(
+            "SELECT * FROM project_users WHERE id = ?",
+            (project_user_id,)
+        )
+        row = await cursor.fetchone()
+        return ProjectUser(**row)
+    
+    async def remove_user_from_project(self, project_id: int, user_id: int) -> bool:
+        """Remove a user from a project."""
+        await self._conn.execute(
+            "UPDATE project_users SET is_active = FALSE WHERE project_id = ? AND user_id = ?",
+            (project_id, user_id)
+        )
+        await self._conn.commit()
+        return True
+    
+    async def get_project_users(self, project_id: int) -> List[ProjectUser]:
+        """Get all users in a project."""
+        cursor = await self._conn.execute(
+            "SELECT * FROM project_users WHERE project_id = ? AND is_active = TRUE",
+            (project_id,)
+        )
+        rows = await cursor.fetchall()
+        return [ProjectUser(**row) for row in rows]
+    
+    async def get_user_project_role(self, project_id: int, user_id: int) -> Optional[str]:
+        """Get a user's role in a specific project."""
+        cursor = await self._conn.execute(
+            "SELECT role FROM project_users WHERE project_id = ? AND user_id = ? AND is_active = TRUE",
+            (project_id, user_id)
+        )
+        row = await cursor.fetchone()
+        return row['role'] if row else None
+    
+    async def update_user_project_role(
+        self, 
+        project_id: int, 
+        user_id: int, 
+        role: str
+    ) -> bool:
+        """Update a user's role in a project."""
+        await self._conn.execute(
+            "UPDATE project_users SET role = ? WHERE project_id = ? AND user_id = ?",
+            (role, project_id, user_id)
+        )
+        await self._conn.commit()
+        return True
+    
     # Investigation management
     async def create_investigation(
         self, 
         user_id: int, 
         query: str, 
-        impact_data: Dict[str, Any]
+        impact_data: Dict[str, Any],
+        project_id: Optional[int] = None
     ) -> Investigation:
         """Create a new investigation record."""
         impact_json = json.dumps(impact_data) if impact_data else None
@@ -195,9 +402,9 @@ class SQLiteDatabase(DatabaseAbc):
         
         cursor = await self._conn.execute(
             """INSERT INTO investigations 
-               (user_id, query, impact_data, component_count, status, started_at) 
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (user_id, query, impact_json, component_count, InvestigationStatus.RUNNING, datetime.utcnow())
+               (user_id, project_id, query, impact_data, component_count, status, started_at) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, project_id, query, impact_json, component_count, InvestigationStatus.RUNNING, datetime.utcnow())
         )
         await self._conn.commit()
         
@@ -222,14 +429,76 @@ class SQLiteDatabase(DatabaseAbc):
         
         return Investigation(**data)
     
-    async def get_user_investigations(self, user_id: int, limit: int = 10) -> List[Investigation]:
-        """Get user's recent investigations."""
+    async def get_user_investigations(
+        self, 
+        user_id: int, 
+        project_id: Optional[int] = None,
+        limit: int = 10
+    ) -> List[Investigation]:
+        """Get user's recent investigations, optionally filtered by project."""
+        if project_id:
+            cursor = await self._conn.execute(
+                """SELECT * FROM investigations 
+                   WHERE user_id = ? AND project_id = ?
+                   ORDER BY created_at DESC 
+                   LIMIT ?""",
+                (user_id, project_id, limit)
+            )
+        else:
+            cursor = await self._conn.execute(
+                """SELECT * FROM investigations 
+                   WHERE user_id = ? 
+                   ORDER BY created_at DESC 
+                   LIMIT ?""",
+                (user_id, limit)
+            )
+        rows = await cursor.fetchall()
+        
+        investigations = []
+        for row in rows:
+            data = dict(row)
+            if data['impact_data']:
+                data['impact_data'] = json.loads(data['impact_data'])
+            investigations.append(Investigation(**data))
+        
+        return investigations
+    
+    async def get_project_investigations(
+        self, 
+        project_id: int, 
+        limit: int = 10
+    ) -> List[Investigation]:
+        """Get investigations for a specific project."""
         cursor = await self._conn.execute(
             """SELECT * FROM investigations 
-               WHERE user_id = ? 
+               WHERE project_id = ?
                ORDER BY created_at DESC 
                LIMIT ?""",
-            (user_id, limit)
+            (project_id, limit)
+        )
+        rows = await cursor.fetchall()
+        
+        investigations = []
+        for row in rows:
+            data = dict(row)
+            if data['impact_data']:
+                data['impact_data'] = json.loads(data['impact_data'])
+            investigations.append(Investigation(**data))
+        
+        return investigations
+    
+    async def get_project_investigations(
+        self, 
+        project_id: int, 
+        limit: int = 10
+    ) -> List[Investigation]:
+        """Get investigations for a specific project."""
+        cursor = await self._conn.execute(
+            """SELECT * FROM investigations 
+               WHERE project_id = ?
+               ORDER BY created_at DESC 
+               LIMIT ?""",
+            (project_id, limit)
         )
         rows = await cursor.fetchall()
         
@@ -405,47 +674,82 @@ class SQLiteDatabase(DatabaseAbc):
         return True
     
     # Analytics
-    async def get_user_stats(self, user_id: int) -> Dict[str, Any]:
-        """Get user statistics."""
+    async def get_user_stats(self, user_id: int, project_id: Optional[int] = None) -> Dict[str, Any]:
+        """Get user statistics, optionally filtered by project."""
         # Total investigations
-        cursor = await self._conn.execute(
-            "SELECT COUNT(*) as count FROM investigations WHERE user_id = ?",
-            (user_id,)
-        )
+        if project_id:
+            cursor = await self._conn.execute(
+                "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND project_id = ?",
+                (user_id, project_id)
+            )
+        else:
+            cursor = await self._conn.execute(
+                "SELECT COUNT(*) as count FROM investigations WHERE user_id = ?",
+                (user_id,)
+            )
         total_investigations = (await cursor.fetchone())['count']
         
         # Completed investigations
-        cursor = await self._conn.execute(
-            "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND status = ?",
-            (user_id, InvestigationStatus.COMPLETED)
-        )
+        if project_id:
+            cursor = await self._conn.execute(
+                "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND project_id = ? AND status = ?",
+                (user_id, project_id, InvestigationStatus.COMPLETED)
+            )
+        else:
+            cursor = await self._conn.execute(
+                "SELECT COUNT(*) as count FROM investigations WHERE user_id = ? AND status = ?",
+                (user_id, InvestigationStatus.COMPLETED)
+            )
         completed_investigations = (await cursor.fetchone())['count']
         
         # Average execution time
-        cursor = await self._conn.execute(
-            """SELECT AVG(execution_time_ms) as avg_time 
-               FROM investigations 
-               WHERE user_id = ? AND execution_time_ms IS NOT NULL""",
-            (user_id,)
-        )
+        if project_id:
+            cursor = await self._conn.execute(
+                """SELECT AVG(execution_time_ms) as avg_time 
+                   FROM investigations 
+                   WHERE user_id = ? AND project_id = ? AND execution_time_ms IS NOT NULL""",
+                (user_id, project_id)
+            )
+        else:
+            cursor = await self._conn.execute(
+                """SELECT AVG(execution_time_ms) as avg_time 
+                   FROM investigations 
+                   WHERE user_id = ? AND execution_time_ms IS NOT NULL""",
+                (user_id,)
+            )
         avg_time_row = await cursor.fetchone()
         avg_execution_time = avg_time_row['avg_time'] if avg_time_row else None
         
         # Knowledge gaps identified
-        cursor = await self._conn.execute(
-            """SELECT COUNT(*) as count 
-               FROM knowledge_gaps kg
-               JOIN investigations i ON kg.investigation_id = i.id
-               WHERE i.user_id = ?""",
-            (user_id,)
-        )
+        if project_id:
+            cursor = await self._conn.execute(
+                """SELECT COUNT(*) as count 
+                   FROM knowledge_gaps kg
+                   JOIN investigations i ON kg.investigation_id = i.id
+                   WHERE i.user_id = ? AND i.project_id = ?""",
+                (user_id, project_id)
+            )
+        else:
+            cursor = await self._conn.execute(
+                """SELECT COUNT(*) as count 
+                   FROM knowledge_gaps kg
+                   JOIN investigations i ON kg.investigation_id = i.id
+                   WHERE i.user_id = ?""",
+                (user_id,)
+            )
         knowledge_gaps = (await cursor.fetchone())['count']
         
         # Last investigation date
-        cursor = await self._conn.execute(
-            "SELECT MAX(created_at) as last_date FROM investigations WHERE user_id = ?",
-            (user_id,)
-        )
+        if project_id:
+            cursor = await self._conn.execute(
+                "SELECT MAX(created_at) as last_date FROM investigations WHERE user_id = ? AND project_id = ?",
+                (user_id, project_id)
+            )
+        else:
+            cursor = await self._conn.execute(
+                "SELECT MAX(created_at) as last_date FROM investigations WHERE user_id = ?",
+                (user_id,)
+            )
         last_row = await cursor.fetchone()
         last_investigation = last_row['last_date'] if last_row else None
         
@@ -456,6 +760,57 @@ class SQLiteDatabase(DatabaseAbc):
             knowledge_gaps_identified=knowledge_gaps,
             last_investigation_date=last_investigation
         ).dict()
+    
+    async def get_project_stats(self, project_id: int) -> Dict[str, Any]:
+        """Get project-specific statistics."""
+        # Total investigations
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) as count FROM investigations WHERE project_id = ?",
+            (project_id,)
+        )
+        total_investigations = (await cursor.fetchone())['count']
+        
+        # Active investigations
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) as count FROM investigations WHERE project_id = ? AND status = ?",
+            (project_id, InvestigationStatus.RUNNING)
+        )
+        active_investigations = (await cursor.fetchone())['count']
+        
+        # Knowledge gaps
+        cursor = await self._conn.execute(
+            """SELECT COUNT(*) as count 
+               FROM knowledge_gaps kg
+               JOIN investigations i ON kg.investigation_id = i.id
+               WHERE i.project_id = ?""",
+            (project_id,)
+        )
+        total_knowledge_gaps = (await cursor.fetchone())['count']
+        
+        # Average investigation time
+        cursor = await self._conn.execute(
+            """SELECT AVG(execution_time_ms) as avg_time 
+               FROM investigations 
+               WHERE project_id = ? AND execution_time_ms IS NOT NULL""",
+            (project_id,)
+        )
+        avg_time_row = await cursor.fetchone()
+        avg_investigation_time = avg_time_row['avg_time'] if avg_time_row else None
+        
+        # Project users
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) as count FROM project_users WHERE project_id = ? AND is_active = TRUE",
+            (project_id,)
+        )
+        total_users = (await cursor.fetchone())['count']
+        
+        return {
+            "total_investigations": total_investigations,
+            "active_investigations": active_investigations,
+            "total_knowledge_gaps": total_knowledge_gaps,
+            "avg_investigation_time_ms": avg_investigation_time,
+            "total_users": total_users
+        }
     
     async def get_system_stats(self) -> Dict[str, Any]:
         """Get system-wide statistics."""

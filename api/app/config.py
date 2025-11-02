@@ -48,6 +48,11 @@ class Settings:
         self.database_url = os.getenv("DATABASE_URL", "sqlite:///archaeologist.db")
         self.database_type = os.getenv("DATABASE_TYPE", "sqlite")
         
+        # JWT Configuration
+        self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+        self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+        self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 15))
+        
         # Telemetry Configuration
         self.OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "archaeologist-api")
         self.OTEL_SERVICE_VERSION = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")

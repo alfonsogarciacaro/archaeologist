@@ -5,7 +5,7 @@ Pydantic models for structured data storage in the relational database.
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -13,14 +13,44 @@ from pydantic import BaseModel, Field
 
 class User(BaseModel):
     """User model for authentication and authorization."""
-    id: Optional[int] = None
+    id: int
     username: str = Field(..., min_length=3, max_length=50)
-    email: str = Field(..., regex=r'^[^@]+@[^@]+\.[^@]+$')
+    email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
     hashed_password: str = Field(..., min_length=60)
     is_active: bool = True
     is_admin: bool = False
     created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
+
+
+class Project(BaseModel):
+    """Project model for organizing investigations."""
+    id: int
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    repository_paths: Optional[List[str]] = None  # List of repo paths included in project
+    is_active: bool = True
+    created_by: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ProjectUser(BaseModel):
+    """Many-to-many relationship between projects and users."""
+    id: int
+    project_id: int
+    user_id: int
+    role: str = Field(..., pattern=r'^(owner|admin|member|viewer)$')
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+
+
+class ProjectRole(str, Enum):
+    """Project role enumeration."""
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+    VIEWER = "viewer"
 
 
 class InvestigationStatus(str, Enum):
@@ -36,6 +66,7 @@ class Investigation(BaseModel):
     """Investigation record storing user queries and results."""
     id: Optional[int] = None
     user_id: int
+    project_id: Optional[int] = None  # Optional project association
     query: str = Field(..., min_length=1, max_length=1000)
     status: InvestigationStatus = InvestigationStatus.PENDING
     impact_data: Optional[Dict[str, Any]] = None

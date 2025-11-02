@@ -72,15 +72,9 @@ run_api_tests() {
     echo "🔌 Running API Tests..."
     echo "======================"
     
-    # Create virtual environment if needed
-    if [ ! -d "api/.venv" ]; then
-        echo "🐍 Creating API virtual environment..."
-        cd api && uv venv && cd ..
-    fi
-    
     # Install dependencies
     cd api
-    uv pip sync pyproject.toml
+    uv sync --locked
     
     # Run tests with app directory in Python path and suppress warnings
     PYTHONPATH=. uv run python -m pytest tests/ -v --tb=short -W ignore::UserWarning -W ignore::DeprecationWarning
@@ -102,15 +96,9 @@ run_scanner_tests() {
     echo "🔍 Running Scanner Tests..."
     echo "=========================="
     
-    # Create virtual environment if needed
-    if [ ! -d "scanner/.venv" ]; then
-        echo "🐍 Creating Scanner virtual environment..."
-        cd scanner && uv venv && cd ..
-    fi
-    
     # Install dependencies
     cd scanner
-    uv pip sync pyproject.toml
+    uv sync --locked
     
     # Run tests with current directory in Python path
     uv run python -m pytest -v --tb=short

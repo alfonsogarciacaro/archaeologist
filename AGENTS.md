@@ -205,7 +205,7 @@ The frontend is built with modern tooling for optimal development experience and
 
 This section documents significant architectural and implementation decisions made during the development of the Enterprise Code Archaeologist system.
 
-### 10.1 API Versioning Strategy (2025-11-02)
+### 10.1 API Versioning Strategy (2025-11-01)
 
 **Decision**: Implement API versioning using the `/api/v1/` prefix for all endpoints.
 
@@ -235,3 +235,68 @@ This section documents significant architectural and implementation decisions ma
 - `ui/src/App.tsx` - Updated fetch URL to use `/api/v1/investigate`
 - `api/app/main.py` - Added APIRouter with `/api/v1` prefix
 - `ui/vite.config.ts` - Already correctly configured to proxy `/api` routes
+
+### 10.2 Authentication & Authorization Strategy (2025-11-02)
+
+**Decision**: Implement JWT-based authentication with secure in-memory token storage and automatic anonymous access for prototype.
+
+**Rationale**:
+- JWT provides stateless authentication suitable for distributed systems
+- In-memory storage prevents client-side token persistence security risks
+- Automatic anonymous access enables immediate prototype testing without user management overhead
+- Vite automatic proxying eliminates hardcoded backend URLs
+- Role-based access control provides foundation for multi-tenant security
+- HttpOnly cookie foundation for production refresh tokens
+
+**Implementation**:
+- JWT tokens signed with HS256 algorithm using configurable secret keys
+- Tokens stored only in React state (memory), not localStorage/sessionStorage
+- Anonymous user automatically created and authenticated on first access
+- Failed token refresh triggers automatic re-authentication as anonymous
+- Project-based role system (owner, admin, member, viewer) for access control
+- Vite automatic proxying handles `/api` routes in development
+- Frontend authentication context with proper loading and login screen states
+- Backend ready for HttpOnly refresh token cookies (commented for prototype)
+
+**Security Features**:
+- No localStorage token storage (prevents XSS token theft)
+- In-memory only token persistence (cleared on browser close)
+- Automatic token refresh on 401 responses
+- Secure redirect to login page on authentication failures
+- Cookie support ready for production refresh tokens
+- Automatic Vite proxying eliminates hardcoded URLs
+- Role-based endpoint protection
+
+**Alternatives Considered**:
+1. Session-based authentication - Rejected as less suitable for stateless APIs
+2. localStorage token storage - Rejected due to XSS security risks
+3. No authentication for prototype - Rejected as wouldn't demonstrate production patterns
+4. OAuth2/OIDC integration - Rejected as overly complex for prototype phase
+5. Hardcoded backend URLs - Rejected in favor of Vite automatic proxying
+6. Basic authentication - Rejected as less secure than JWT tokens
+
+**Benefits**:
+- Production-ready authentication foundation
+- Secure by default (no localStorage token persistence)
+- Seamless user experience for prototype testing
+- Clear upgrade path to full user authentication
+- Stateless authentication scales well
+- Role-based access control enables multi-tenancy
+- Modern development workflow with Vite proxying
+
+**Files Modified**:
+- `api/app/auth_service.py` - JWT token management
+- `api/app/routes/auth.py` - Authentication endpoints with cookie support
+- `api/app/routes/projects.py` - Project management with RBAC
+- `api/dependencies/auth.py` - Authentication dependencies
+- `api/models/database.py` - Added Project, ProjectUser models
+- `api/db/base.py` - Added project management methods
+- `api/db/sqlite.py` - Added project and user table schemas
+- `ui/src/contexts/AuthContext.tsx` - Secure in-memory auth state management
+- `ui/src/utils/apiClient.ts` - API client with Vite proxying
+- `ui/src/App.tsx` - Authentication flow with login screen handling
+- `ui/src/components/LoginPage.tsx` - Login page component
+- `ui/src/components/LoginPage.css` - Login page styling
+- `ui/src/App.css` - Loading and login screen styles
+- `.env.dev` / `.env.prod` - Added JWT configuration
+- `docs/AUTHENTICATION_IMPLEMENTATION.md` - Updated with security architecture
