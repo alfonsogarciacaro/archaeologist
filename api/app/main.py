@@ -259,18 +259,18 @@ async def investigation_status():
     }
 
 
-# Include the API v1 router
-app.include_router(api_v1_router)
-
-# Include database router
+# Include all routers under the API v1 router
 from .routes.database import database_router
-app.include_router(database_router)
-
-# Include authentication and project routes
 from .routes.auth import router as auth_router
 from .routes.projects import router as projects_router
-app.include_router(auth_router)
-app.include_router(projects_router)
+
+# Include all routers under the /api/v1 prefix
+api_v1_router.include_router(database_router)
+api_v1_router.include_router(auth_router)
+api_v1_router.include_router(projects_router)
+
+# Include the API v1 router in the main app
+app.include_router(api_v1_router)
 
 if os.getenv("NODE_ENV") != "development":
     app.mount("/static", StaticFiles(directory="ui/build/static"), name="static")
