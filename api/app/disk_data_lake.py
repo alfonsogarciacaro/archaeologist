@@ -330,6 +330,8 @@ class DiskDataLake(DataLakeInterface):
         
         # Update content if provided
         if content is not None:
+            if not current_entry.file_path:
+                raise DataLakeError(f"File path missing for entry {entry_id}")
             file_path = self.base_path / current_entry.file_path
             try:
                 async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:

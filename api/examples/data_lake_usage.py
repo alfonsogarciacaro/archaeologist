@@ -9,7 +9,8 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from shared import DiskDataLake, DataType
+from api.app.data_lake_interface import DataLakeError
+from app.disk_data_lake import DiskDataLake, DataType
 
 
 async def main():
@@ -156,6 +157,9 @@ End Function''',
         print("\n=== Retrieving Specific Data ===")
         
         # Retrieve the macro by path
+        if not macro_entry.file_path:
+            raise DataLakeError(f"File path missing for entry {macro_entry.id}")
+
         retrieved_macro = await data_lake.retrieve_by_path(macro_entry.file_path)
         print(f"Retrieved macro: {retrieved_macro.name}")
         print(f"Content preview: {retrieved_macro.content[:100]}...")

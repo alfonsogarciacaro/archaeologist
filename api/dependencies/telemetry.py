@@ -78,12 +78,11 @@ class TelemetryConfig:
             insecure=True  # Set to False in production with proper TLS
         )
         
-        # Create TracerProvider with resource
-        trace.set_tracer_provider(TracerProvider(resource=resource))
-        
-        # Add OTLP exporter to tracer provider
+        # Create TracerProvider with resource and attach span processor before setting it globally
+        provider = TracerProvider(resource=resource)
         span_processor = BatchSpanProcessor(otlp_exporter)
-        trace.get_tracer_provider().add_span_processor(span_processor)
+        provider.add_span_processor(span_processor)
+        trace.set_tracer_provider(provider)
     
     def _initialize_metrics(self, resource: Resource):
         """Initialize metrics collection."""
@@ -155,11 +154,12 @@ def get_telemetry_config(settings=None):
 def initialize_telemetry(settings):
     """Initialize telemetry with provided settings."""
     telemetry_config = get_telemetry_config(settings)
-    telemetry_config.initialize_telemetry()
+    if telemetry_config:
+        telemetry_config.initialize_telemetry()
     return telemetry_config
 
 
-def get_tracer(name: str = None):
+def get_tracer(name: str | None = None):
     """Get a tracer instance."""
     _config = get_telemetry_config()
     if _config and _config.is_enabled():
@@ -171,7 +171,7 @@ def get_tracer(name: str = None):
         return NoOpTracer()
 
 
-def get_meter(name: str = None):
+def get_meter(name: str | None = None):
     """Get a meter instance."""
     _config = get_telemetry_config()
     if _config and _config.is_enabled():

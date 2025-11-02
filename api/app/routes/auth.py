@@ -158,7 +158,7 @@ class RegisterRequest(BaseModel):
     
     class Config:
         str_strip_whitespace = True
-        min_anystr_length = 3
+        str_min_length = 3
 
 
 @router.post("/register", response_model=TokenResponse)

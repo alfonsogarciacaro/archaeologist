@@ -16,7 +16,8 @@ from models.database import (
     Investigation,
     KnowledgeGap,
     InvestigationSession,
-    InvestigationStatus
+    InvestigationStatus,
+    Source
 )
 
 
@@ -114,12 +115,43 @@ class DatabaseAbc(abc.ABC):
     
     @abc.abstractmethod
     async def update_user_project_role(
-        self, 
-        project_id: int, 
-        user_id: int, 
+        self,
+        project_id: int,
+        user_id: int,
         role: str
     ) -> bool:
         """Update a user's role in a project."""
+        pass
+
+    # Source management
+    @abc.abstractmethod
+    async def create_source(
+        self,
+        project_id: int,
+        filename: str,
+        original_filename: str,
+        file_size: int,
+        file_type: str,
+        content_type: str,
+        data_lake_entry_id: str,
+        uploaded_by: int
+    ) -> Source:
+        """Create a new source record."""
+        pass
+
+    @abc.abstractmethod
+    async def get_project_sources(self, project_id: int) -> List[Source]:
+        """Get all sources for a project."""
+        pass
+
+    @abc.abstractmethod
+    async def get_source_by_id(self, source_id: int) -> Optional[Source]:
+        """Get source by ID."""
+        pass
+
+    @abc.abstractmethod
+    async def delete_source(self, source_id: int) -> bool:
+        """Delete a source record."""
         pass
     
     # Investigation management

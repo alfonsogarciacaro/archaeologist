@@ -10,24 +10,9 @@ import logging
 from pathlib import Path
 from .config import get_settings
 
-# Add shared directory to Python path (navigate up until found)
-def find_dir_upwards(dirname: str = "shared") -> str:
-    """Find shared directory by navigating up from current location"""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    while True:
-        found = os.path.join(current_dir, dirname)
-        if os.path.exists(found):
-            return found        
-        parent_dir = os.path.dirname(current_dir)
-        if parent_dir == current_dir:  # Reached root
-            raise FileNotFoundError("shared directory not found")
-        current_dir = parent_dir
-
-sys.path.insert(0, find_dir_upwards("shared"))
-
-# Import telemetry and middleware
-from telemetry import initialize_telemetry, get_tracer
-from middleware import TracingMiddleware
+# Import telemetry and middleware from shared package
+# from telemetry import initialize_telemetry, get_tracer
+# from middleware import TracingMiddleware
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,19 +20,16 @@ logger = logging.getLogger(__name__)
 
 # Get settings and initialize telemetry
 settings = get_settings()
-telemetry_config = initialize_telemetry(settings)
-
-# Get tracer for manual instrumentation
-tracer = get_tracer(__name__)
 
 app = FastAPI(title="Code Scanner Service", version="1.0.0")
 
 # Add automatic tracing middleware
-app.add_middleware(TracingMiddleware)
+# app.add_middleware(TracingMiddleware)
 
 # Instrument FastAPI for additional automatic tracing
-telemetry_config.instrument_fastapi(app)
-telemetry_config.instrument_httpx()
+# telemetry_config = initialize_telemetry(settings)
+# telemetry_config.instrument_fastapi(app)
+# telemetry_config.instrument_httpx()
 
 class ScanRequest(BaseModel):
     query: str

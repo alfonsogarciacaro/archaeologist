@@ -15,9 +15,6 @@ RUN dnf update -y && dnf install -y \
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Copy shared modules first
-COPY shared/ ./shared/
-
 # Copy scanner requirements for better caching
 COPY scanner/pyproject.toml scanner/uv.lock ./
 RUN /root/.cargo/bin/uv pip sync uv.lock

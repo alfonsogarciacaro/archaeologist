@@ -5,7 +5,7 @@ import time
 from typing import Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from telemetry import get_tracer
+from dependencies.telemetry import get_tracer
 
 
 class TracingMiddleware(BaseHTTPMiddleware):
@@ -21,7 +21,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
             span.set_attribute("http.method", request.method)
             span.set_attribute("http.url", str(request.url))
             span.set_attribute("http.scheme", request.url.scheme)
-            span.set_attribute("http.host", request.url.hostname)
+            span.set_attribute("http.host", request.url.hostname or "")
             span.set_attribute("http.target", request.url.path)
             if request.url.port:
                 span.set_attribute("http.port", request.url.port)

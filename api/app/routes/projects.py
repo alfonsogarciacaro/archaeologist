@@ -5,17 +5,183 @@ This module provides endpoints for creating, managing, and accessing projects
 and their user permissions.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import uuid
+import zipfile
+import io
+from pathlib import Path
 
 from dependencies.auth import get_current_user_id
 from dependencies.database import get_database
 from db import DatabaseAbc
-from models.database import ProjectRole
+from models.database import ProjectRole, Source
+from app.data_lake_interface import DataType
+from app.disk_data_lake import DiskDataLake
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+# Initialize data lake
+data_lake = DiskDataLake(base_path="data_lake")
+
+
+def is_text_file(filename: str, content: bytes) -> bool:
+    """Check if a file is a text file based on extension and content."""
+    text_extensions = {
+        '.txt', '.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', '.json',
+        '.xml', '.yaml', '.yml', '.md', '.sql', '.sh', '.bash', '.zsh',
+        '.cfg', '.conf', '.ini', '.toml', '.env', '.log', '.csv', '.tsv'
+    }
+
+    # Check extension
+    ext = Path(filename).suffix.lower()
+    if ext in text_extensions:
+        return True
+
+    # Check content for common text patterns (limited check for safety)
+    try:
+        content.decode('utf-8')
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+async def process_file_content(
+    file: UploadFile,
+    project_id: int,
+    current_user_id: int,
+    db: DatabaseAbc
+) -> Optional[Source]:
+    """Process a single uploaded file and store it in the data lake."""
+    try:
+        # Read file content
+        content_bytes = await file.read()
+        file_size = len(content_bytes)
+
+        # Reset file position for potential re-reading
+        await file.seek(0)
+
+        # Determine content type
+        filename = file.filename or "unknown"
+        if filename.lower().endswith('.zip'):
+            content_type = "zip"
+        elif is_text_file(filename, content_bytes):
+            content_type = "text"
+        else:
+            return None  # Skip unsupported file types
+
+        # Generate unique filename
+        file_ext = Path(filename).suffix
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+
+        # Store in data lake
+        project_subpath = f"projects/{project_id}"
+
+        if content_type == "zip":
+            # Handle zip file extraction
+            content_str = ""
+            extracted_files = []
+
+            try:
+                zip_content = await file.read()
+                await file.seek(0)
+
+                with zipfile.ZipFile(io.BytesIO(zip_content), 'r') as zip_ref:
+                    for file_info in zip_ref.infolist():
+                        if not file_info.is_dir():
+                            try:
+                                extracted_content = zip_ref.read(file_info.filename)
+
+                                if is_text_file(file_info.filename, extracted_content):
+                                    extracted_text = extracted_content.decode('utf-8', errors='ignore')
+
+                                    # Store each extracted file in data lake
+                                    extracted_filename = f"{uuid.uuid4()}_{Path(file_info.filename).name}"
+                                    await data_lake.store(
+                                        name=extracted_filename,
+                                        content=extracted_text,
+                                        data_type=DataType.OTHER,
+                                        metadata={
+                                            "original_filename": file_info.filename,
+                                            "project_id": str(project_id),
+                                            "extracted_from_zip": filename,
+                                            "file_size": len(extracted_content)
+                                        },
+                                        subpath=project_subpath
+                                    )
+
+                                    extracted_files.append({
+                                        "filename": file_info.filename,
+                                        "size": len(extracted_content)
+                                    })
+
+                                    content_str += f"\n\n--- File: {file_info.filename} ---\n{extracted_text}"
+                            except Exception as e:
+                                print(f"Error extracting file {file_info.filename}: {e}")
+                                continue
+
+                if not extracted_files:
+                    return None  # No text files found in zip
+
+                # Store the zip manifest
+                manifest_content = f"Zip file: {filename}\nExtracted files:\n"
+                for extracted in extracted_files:
+                    manifest_content += f"- {extracted['filename']} ({extracted['size']} bytes)\n"
+
+                data_lake_entry = await data_lake.store(
+                    name=unique_filename,
+                    content=manifest_content,
+                    data_type=DataType.OTHER,
+                    metadata={
+                        "original_filename": filename,
+                        "project_id": str(project_id),
+                        "file_type": "zip",
+                        "file_size": file_size,
+                        "extracted_files_count": len(extracted_files),
+                        "extracted_files": extracted_files
+                    },
+                    subpath=project_subpath
+                )
+
+            except zipfile.BadZipFile:
+                return None  # Invalid zip file
+
+        else:
+            # Handle text file
+            content_str = content_bytes.decode('utf-8', errors='ignore')
+
+            data_lake_entry = await data_lake.store(
+                name=unique_filename,
+                content=content_str,
+                data_type=DataType.OTHER,
+                metadata={
+                    "original_filename": filename,
+                    "project_id": str(project_id),
+                    "file_type": "text",
+                    "file_size": file_size
+                },
+                subpath=project_subpath
+            )
+
+        # Create source record in database
+        source = await db.create_source(
+            project_id=project_id,
+            filename=unique_filename,
+            original_filename=filename,
+            file_size=file_size,
+            file_type=file.content_type or "application/octet-stream",
+            content_type=content_type,
+            data_lake_entry_id=data_lake_entry.id,
+            uploaded_by=current_user_id
+        )
+
+        return source
+
+    except Exception as e:
+        print(f"Error processing file {file.filename}: {e}")
+        return None
 
 
 class ProjectCreate(BaseModel):
@@ -67,6 +233,29 @@ class UserWithRole(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class SourceResponse(BaseModel):
+    """Source response model."""
+    id: int
+    project_id: int
+    filename: str
+    original_filename: str
+    file_size: int
+    file_type: str
+    content_type: str
+    uploaded_by: int
+    created_at: Optional[datetime] = None
+
+
+class FileUploadResponse(BaseModel):
+    """File upload response model."""
+    success: bool
+    message: str
+    sources: List[SourceResponse]
+    total_files: int
+    processed_files: int
+    skipped_files: int
+
+
 async def check_project_access(
     project_id: int,
     user_id: int,
@@ -107,7 +296,7 @@ async def check_project_access(
     return user_role
 
 
-@router.post("/", response_model=ProjectResponse)
+@router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
     current_user_id: int = Depends(get_current_user_id),
@@ -401,5 +590,136 @@ async def remove_user_from_project(
             )
     
     await db.remove_user_from_project(project_id, user_id)
-    
+
     return {"message": "User removed from project successfully"}
+
+
+@router.post("/{project_id}/upload", response_model=FileUploadResponse)
+async def upload_project_sources(
+    project_id: int,
+    files: List[UploadFile] = File(...),
+    current_user_id: int = Depends(get_current_user_id),
+    db: DatabaseAbc = Depends(get_database)
+):
+    """Upload source files to a project."""
+    # Check user access
+    await check_project_access(project_id, current_user_id, db)
+
+    if not files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No files provided"
+        )
+
+    processed_sources = []
+    total_files = len(files)
+    skipped_files = 0
+
+    for file in files:
+        if not file.filename:
+            skipped_files += 1
+            continue
+
+        try:
+            source = await process_file_content(
+                file, project_id, current_user_id, db
+            )
+
+            if source:
+                processed_sources.append(SourceResponse(
+                    id=source.id,
+                    project_id=source.project_id,
+                    filename=source.filename,
+                    original_filename=source.original_filename,
+                    file_size=source.file_size,
+                    file_type=source.file_type,
+                    content_type=source.content_type,
+                    uploaded_by=source.uploaded_by,
+                    created_at=source.created_at
+                ))
+            else:
+                skipped_files += 1
+
+        except Exception as e:
+            print(f"Error processing file {file.filename}: {e}")
+            skipped_files += 1
+            continue
+
+    processed_files = len(processed_sources)
+
+    if processed_files == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No supported files were processed. Please upload text files (.txt, .py, .js, etc.) or zip files containing text files."
+        )
+
+    return FileUploadResponse(
+        success=True,
+        message=f"Successfully processed {processed_files} out of {total_files} files. {skipped_files} files were skipped.",
+        sources=processed_sources,
+        total_files=total_files,
+        processed_files=processed_files,
+        skipped_files=skipped_files
+    )
+
+
+@router.get("/{project_id}/sources", response_model=List[SourceResponse])
+async def get_project_sources(
+    project_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: DatabaseAbc = Depends(get_database)
+):
+    """Get all sources for a project."""
+    # Check user access
+    await check_project_access(project_id, current_user_id, db)
+
+    sources = await db.get_project_sources(project_id)
+
+    return [
+        SourceResponse(
+            id=source.id,
+            project_id=source.project_id,
+            filename=source.filename,
+            original_filename=source.original_filename,
+            file_size=source.file_size,
+            file_type=source.file_type,
+            content_type=source.content_type,
+            uploaded_by=source.uploaded_by,
+            created_at=source.created_at
+        )
+        for source in sources
+    ]
+
+
+@router.delete("/{project_id}/sources/{source_id}")
+async def delete_project_source(
+    project_id: int,
+    source_id: int,
+    current_user_id: int = Depends(get_current_user_id),
+    db: DatabaseAbc = Depends(get_database)
+):
+    """Delete a source from a project."""
+    # Check user has admin or owner role
+    await check_project_access(
+        project_id, current_user_id, db,
+        [ProjectRole.OWNER, ProjectRole.ADMIN]
+    )
+
+    # Get source to verify it belongs to the project
+    source = await db.get_source_by_id(source_id)
+    if not source or source.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Source not found in this project"
+        )
+
+    # Delete from database (data lake cleanup could be added here)
+    success = await db.delete_source(source_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete source"
+        )
+
+    return {"message": "Source deleted successfully"}

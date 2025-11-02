@@ -12,13 +12,14 @@ from aiosqlite import connect, Connection
 
 from .base import DatabaseAbc
 from models.database import (
-    User, 
+    User,
     Project,
     ProjectUser,
-    Investigation, 
-    KnowledgeGap, 
+    Investigation,
+    KnowledgeGap,
     InvestigationSession,
     InvestigationStatus,
+    Source,
     UserStats,
     SystemStats
 )
@@ -105,7 +106,25 @@ class SQLiteDatabase(DatabaseAbc):
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
-        
+
+        # Sources table (for uploaded files)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                original_filename TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                file_type TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                data_lake_entry_id TEXT NOT NULL,
+                uploaded_by INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                FOREIGN KEY (uploaded_by) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+
         # Investigations table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS investigations (
@@ -180,7 +199,9 @@ class SQLiteDatabase(DatabaseAbc):
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects (is_active)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_project_id ON project_users (project_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_user_id ON project_users (user_id)")
-        
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_project_id ON sources (project_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_uploaded_by ON sources (uploaded_by)")
+
         await conn.commit()
     
     async def _insert_default_config(self) -> None:
@@ -946,3 +967,74 @@ class SQLiteDatabase(DatabaseAbc):
             avg_investigation_time_ms=avg_investigation_time,
             most_quied_components=None  # TODO: Implement component frequency analysis
         ).model_dump()
+
+    # Source management
+    async def create_source(
+        self,
+        project_id: int,
+        filename: str,
+        original_filename: str,
+        file_size: int,
+        file_type: str,
+        content_type: str,
+        data_lake_entry_id: str,
+        uploaded_by: int
+    ) -> Source:
+        """Create a new source record."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute("""
+            INSERT INTO sources (
+                project_id, filename, original_filename, file_size,
+                file_type, content_type, data_lake_entry_id, uploaded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            project_id, filename, original_filename, file_size,
+            file_type, content_type, data_lake_entry_id, uploaded_by
+        ))
+
+        source_id = cursor.lastrowid
+        await conn.commit()
+
+        # Retrieve the created source
+        cursor = await conn.execute(
+            "SELECT * FROM sources WHERE id = ?", (source_id,)
+        )
+        row = await cursor.fetchone()
+        if not row:
+            raise RuntimeError("Failed to retrieve source after creation.")
+        return Source(**row)
+
+    async def get_project_sources(self, project_id: int) -> List[Source]:
+        """Get all sources for a project."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute(
+            "SELECT * FROM sources WHERE project_id = ? ORDER BY created_at DESC",
+            (project_id,)
+        )
+        rows = await cursor.fetchall()
+
+        return [Source(**row) for row in rows]
+
+    async def get_source_by_id(self, source_id: int) -> Optional[Source]:
+        """Get source by ID."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute(
+            "SELECT * FROM sources WHERE id = ?", (source_id,)
+        )
+        row = await cursor.fetchone()
+
+        return Source(**row) if row else None
+
+    async def delete_source(self, source_id: int) -> bool:
+        """Delete a source record."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute(
+            "DELETE FROM sources WHERE id = ?", (source_id,)
+        )
+        await conn.commit()
+
+        return cursor.rowcount > 0

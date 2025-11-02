@@ -35,6 +35,20 @@ class Project(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class Source(BaseModel):
+    """Source model for uploaded files in projects."""
+    id: int
+    project_id: int
+    filename: str = Field(..., max_length=255)
+    original_filename: str = Field(..., max_length=255)
+    file_size: int = Field(..., ge=0)
+    file_type: str = Field(..., max_length=100)  # MIME type
+    content_type: str = Field(..., max_length=50)  # text, zip, etc.
+    data_lake_entry_id: str = Field(..., max_length=255)  # Reference to data lake entry
+    uploaded_by: int
+    created_at: Optional[datetime] = None
+
+
 class ProjectUser(BaseModel):
     """Many-to-many relationship between projects and users."""
     id: int
