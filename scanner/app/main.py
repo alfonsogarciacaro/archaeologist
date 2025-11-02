@@ -1,11 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import subprocess
 import json
 import os
 import sys
+import re
 import logging
+from pathlib import Path
 from .config import get_settings
 
 # Add shared directory to Python path (navigate up until found)
@@ -61,6 +63,48 @@ class ScanResult(BaseModel):
 class ScanResponse(BaseModel):
     results: List[ScanResult]
     total_matches: int
+
+# Dependency Analysis Models
+class DependencyResult(BaseModel):
+    source_file: str
+    target_file: str
+    relationship_type: str  # "reads_from", "writes_to", "imports", "defines_structure_for"
+    evidence: str
+    confidence: float
+
+class DependencyAnalysisRequest(BaseModel):
+    paths: List[str] = ["/app/mock_enterprise"]
+
+class DependencyAnalysisResponse(BaseModel):
+    dependencies: List[DependencyResult]
+    total_found: int
+
+class ComponentNode(BaseModel):
+    id: str
+    name: str
+    file_path: str
+    component_type: str  # "database", "service", "file", "api"
+    source_type: str  # "live_repo", "snapshot"
+    confidence: float
+    last_updated: Optional[str] = None
+    relevant_code: Optional[str] = None
+
+class ComponentEdge(BaseModel):
+    source: str
+    target: str
+    relationship_type: str
+    confidence: float
+    evidence: str
+
+class ImpactAnalysisRequest(BaseModel):
+    query: str
+    paths: List[str] = ["/app/mock_enterprise"]
+
+class ImpactAnalysisResponse(BaseModel):
+    nodes: List[ComponentNode]
+    edges: List[ComponentEdge]
+    knowledge_gaps: List[Dict[str, Any]]
+    explanation: Dict[str, Any]
 
 @app.get("/")
 async def root():
@@ -124,6 +168,310 @@ async def scan_code(request: ScanRequest):
     )        
 
 
+# Dependency Analysis Functions
+def find_files(paths: List[str], pattern: str) -> List[str]:
+    """Find files matching pattern in given paths"""
+    files = []
+    for path in paths:
+        path_obj = Path(path)
+        if path_obj.is_dir():
+            files.extend(path_obj.rglob(pattern))
+        elif path_obj.match(pattern):
+            files.append(path_obj)
+    return [str(f) for f in files]
+
+def extract_table_names(sql_file: str) -> List[str]:
+    """Extract table names from SQL file"""
+    try:
+        with open(sql_file, 'r') as f:
+            content = f.read()
+        
+        # Find CREATE TABLE statements
+        table_pattern = r'CREATE\s+TABLE\s+(\w+)'
+        matches = re.findall(table_pattern, content, re.IGNORECASE)
+        return matches
+    except Exception as e:
+        logger.error(f"Error reading SQL file {sql_file}: {e}")
+        return []
+
+def extract_table_references(file_path: str) -> List[str]:
+    """Extract table references from code file"""
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+        
+        # Look for table references in different patterns
+        patterns = [
+            r'FROM\s+(\w+)',
+            r'JOIN\s+(\w+)',
+            r'INSERT\s+INTO\s+(\w+)',
+            r'UPDATE\s+(\w+)',
+            r'DELETE\s+FROM\s+(\w+)',
+            r'(\w+)\.\w+',  # table.column pattern
+            r'table_name["\']?\s*=\s*["\']?(\w+)',  # table_name = "table"
+        ]
+        
+        references = []
+        for pattern in patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            references.extend(matches)
+        
+        return list(set(references))  # Remove duplicates
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {e}")
+        return []
+
+def extract_function_imports(file_path: str) -> List[str]:
+    """Extract function/module imports from code file"""
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+        
+        imports = []
+        
+        # Python imports
+        if file_path.endswith('.py'):
+            patterns = [
+                r'from\s+(\w+)',
+                r'import\s+(\w+)',
+            ]
+        # JavaScript imports
+        elif file_path.endswith('.js'):
+            patterns = [
+                r'require\(["\']([^"\']+)["\']\)',
+                r'import.*from\s+["\']([^"\']+)["\']',
+            ]
+        else:
+            return []
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, content)
+            imports.extend(matches)
+        
+        return list(set(imports))
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {e}")
+        return []
+
+def analyze_dependencies(paths: List[str]) -> List[DependencyResult]:
+    """Analyze dependencies between files in given paths"""
+    dependencies = []
+    
+    # Find different file types
+    sql_files = find_files(paths, "*.sql")
+    python_files = find_files(paths, "*.py")
+    js_files = find_files(paths, "*.js")
+    vba_files = find_files(paths, "*.vba")
+    
+    # Analyze SQL -> Code dependencies (database structure)
+    for sql_file in sql_files:
+        tables = extract_table_names(sql_file)
+        for code_file in python_files + js_files:
+            referenced_tables = extract_table_references(code_file)
+            common_tables = set(tables) & set(referenced_tables)
+            
+            if common_tables:
+                dependencies.append(DependencyResult(
+                    source_file=sql_file,
+                    target_file=code_file,
+                    relationship_type="defines_structure_for",
+                    evidence=f"Tables {', '.join(common_tables)} defined in SQL are referenced in code",
+                    confidence=0.9
+                ))
+    
+    # Analyze code -> code dependencies (imports, function calls)
+    all_code_files = python_files + js_files + vba_files
+    for i, source_file in enumerate(all_code_files):
+        for target_file in all_code_files[i+1:]:
+            source_imports = extract_function_imports(source_file)
+            target_functions = extract_function_imports(target_file)
+            
+            # Check for cross-references
+            source_name = Path(source_file).stem
+            target_name = Path(target_file).stem
+            
+            if target_name.lower() in [imp.lower() for imp in source_imports]:
+                dependencies.append(DependencyResult(
+                    source_file=source_file,
+                    target_file=target_file,
+                    relationship_type="imports",
+                    evidence=f"{source_file} imports from {target_file}",
+                    confidence=0.8
+                ))
+            
+            # Check for shared data structures (term_sheet_id, etc.)
+            try:
+                with open(source_file, 'r') as f:
+                    source_content = f.read().lower()
+                with open(target_file, 'r') as f:
+                    target_content = f.read().lower()
+                
+                # Look for common identifiers
+                common_identifiers = []
+                for identifier in ['term_sheet_id', 'client_identifier', 'user_id']:
+                    if identifier in source_content and identifier in target_content:
+                        common_identifiers.append(identifier)
+                
+                if common_identifiers:
+                    dependencies.append(DependencyResult(
+                        source_file=source_file,
+                        target_file=target_file,
+                        relationship_type="shares_data_with",
+                        evidence=f"Both files reference: {', '.join(common_identifiers)}",
+                        confidence=0.7
+                    ))
+            except Exception as e:
+                logger.error(f"Error comparing files {source_file} and {target_file}: {e}")
+    
+    return dependencies
+
+@app.post("/analyze-dependencies", response_model=DependencyAnalysisResponse)
+async def analyze_dependencies_endpoint(request: DependencyAnalysisRequest):
+    """
+    Analyze dependencies between files in the given paths.
+    
+    This endpoint identifies relationships like:
+    - SQL files defining structure for code files
+    - Import dependencies between code files
+    - Shared data structures between files
+    """
+    dependencies = analyze_dependencies(request.paths)
+    
+    logger.info(f"Dependency analysis completed: {len(dependencies)} dependencies found")
+    
+    return DependencyAnalysisResponse(
+        dependencies=dependencies,
+        total_found=len(dependencies)
+    )
+
+@app.post("/impact-analysis", response_model=ImpactAnalysisResponse)
+async def impact_analysis_endpoint(request: ImpactAnalysisRequest):
+    """
+    Perform comprehensive impact analysis for a given query.
+    
+    This combines literal search with dependency analysis to create
+    a complete impact graph with nodes and edges.
+    """
+    # Step 1: Find literal matches
+    scan_request = ScanRequest(query=request.query, paths=request.paths)
+    scan_result = await scan_code(scan_request)
+    
+    # Step 2: Analyze dependencies
+    dependencies = analyze_dependencies(request.paths)
+    
+    # Step 3: Build nodes from scan results
+    nodes = []
+    node_id = 0
+    
+    # Create nodes for files with literal matches
+    for match in scan_result.results:
+        node_id += 1
+        component_type = "database" if match.file_path.endswith('.sql') else \
+                       "service" if any(x in match.file_path for x in ['user-service', 'reporting-service']) else \
+                       "file"
+        
+        source_type = "snapshot" if "data_lake" in match.file_path else "live_repo"
+        
+        # Extract relevant code snippet
+        try:
+            with open(match.file_path, 'r') as f:
+                lines = f.readlines()
+                start_line = max(0, match.line_number - 2)
+                end_line = min(len(lines), match.line_number + 2)
+                relevant_code = ''.join(lines[start_line:end_line]).strip()
+        except:
+            relevant_code = match.content
+        
+        nodes.append(ComponentNode(
+            id=str(node_id),
+            name=Path(match.file_path).name,
+            file_path=match.file_path,
+            component_type=component_type,
+            source_type=source_type,
+            confidence=match.confidence,
+            last_updated="2023-10-27" if source_type == "snapshot" else None,
+            relevant_code=relevant_code
+        ))
+    
+    # Step 4: Build edges from dependencies
+    edges = []
+    for dep in dependencies:
+        # Find corresponding nodes
+        source_node = next((n for n in nodes if n.file_path == dep.source_file), None)
+        target_node = next((n for n in nodes if n.file_path == dep.target_file), None)
+        
+        # Create nodes for dependency files if they don't exist
+        if not source_node:
+            node_id += 1
+            source_node = ComponentNode(
+                id=str(node_id),
+                name=Path(dep.source_file).name,
+                file_path=dep.source_file,
+                component_type="database" if dep.source_file.endswith('.sql') else "file",
+                source_type="snapshot" if "data_lake" in dep.source_file else "live_repo",
+                confidence=dep.confidence
+            )
+            nodes.append(source_node)
+        
+        if not target_node:
+            node_id += 1
+            target_node = ComponentNode(
+                id=str(node_id),
+                name=Path(dep.target_file).name,
+                file_path=dep.target_file,
+                component_type="database" if dep.target_file.endswith('.sql') else "file",
+                source_type="snapshot" if "data_lake" in dep.target_file else "live_repo",
+                confidence=dep.confidence
+            )
+            nodes.append(target_node)
+        
+        edges.append(ComponentEdge(
+            source=source_node.id,
+            target=target_node.id,
+            relationship_type=dep.relationship_type,
+            confidence=dep.confidence,
+            evidence=dep.evidence
+        ))
+    
+    # Step 5: Generate knowledge gaps
+    knowledge_gaps = []
+    
+    # Look for external dependencies
+    all_files = [node.file_path for node in nodes]
+    if any('external-payment-api' in node.relevant_code or '' for node in nodes):
+        knowledge_gaps.append({
+            "component": "external-payment-api",
+            "missing_information": "API schema and authentication details",
+            "required_action": "Request API documentation from Payments Team",
+            "estimated_impact": "Medium - payment processing may be affected"
+        })
+    
+    # Step 6: Generate explanation
+    explanation = {
+        "reasoning_steps": [
+            f"Found {len(scan_result.results)} literal matches for '{request.query}'",
+            f"Analyzed {len(dependencies)} dependencies between files",
+            f"Created {len(nodes)} component nodes and {len(edges)} relationships",
+            "Identified potential knowledge gaps and external dependencies"
+        ],
+        "evidence_sources": [
+            {
+                "file": match.file_path,
+                "line": match.line_number,
+                "content": match.content,
+                "confidence": match.confidence
+            } for match in scan_result.results[:5]  # Limit to top 5 for demo
+        ],
+        "confidence_score": min(0.9, len(scan_result.results) / 10.0)  # Simple confidence calculation
+    }
+    
+    return ImpactAnalysisResponse(
+        nodes=nodes,
+        edges=edges,
+        knowledge_gaps=knowledge_gaps,
+        explanation=explanation
+    )
+
 @app.get("/test-scan")
 async def test_scan():
     """Test endpoint to verify scanner works with mock data"""
@@ -132,3 +480,12 @@ async def test_scan():
         paths=["/app/mock_enterprise"]
     )
     return await scan_code(test_request)
+
+@app.get("/test-impact-analysis")
+async def test_impact_analysis():
+    """Test endpoint for impact analysis"""
+    test_request = ImpactAnalysisRequest(
+        query="term_sheet_id",
+        paths=["/app/mock_enterprise"]
+    )
+    return await impact_analysis_endpoint(test_request)

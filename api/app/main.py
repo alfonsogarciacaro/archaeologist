@@ -7,6 +7,7 @@ import os
 import sys
 import logging
 from .config import get_settings
+from .llm_interface import get_llm_provider
 
 # Add shared directory to Python path (navigate up until found)
 def find_dir_upwards(dirname: str = "shared") -> str:
@@ -78,6 +79,8 @@ class ImpactReport(BaseModel):
     edges: List[DependencyEdge]
     knowledge_gaps: List[KnowledgeGap]
     summary: str
+    explanation: Optional[Dict[str, Any]] = None
+    recommendations: Optional[List[str]] = None
 
 @app.get("/")
 async def root():
@@ -180,6 +183,35 @@ async def investigate_change(request: InvestigationRequest):
         knowledge_gaps=[KnowledgeGap(**gap) for gap in dummy_knowledge_gaps],
         summary=f"Found 4 components potentially impacted by: {request.query}"
     )
+
+@app.get("/investigation-status")
+async def investigation_status():
+    """Get status of investigation components"""
+    try:
+        # Check if scanner service is available
+        if settings.SCANNER_URL is None:
+            raise ValueError("SCANNER_URL is not configured")
+        import httpx
+        async with httpx.AsyncClient() as client:
+            scanner_response = await client.get(settings.SCANNER_URL + "/health", timeout=5.0)
+            scanner_status = scanner_response.json().get("status", "unknown")
+    except Exception as e:
+        scanner_status = f"unavailable: {str(e)}"
+    
+    return {
+        "status": "healthy",
+        "components": {
+            "api": "healthy",
+            "mock_llm": "healthy",
+            "scanner": scanner_status
+        },
+        "capabilities": [
+            "literal_search",
+            "dependency_analysis",
+            "mock_llm_reasoning",
+            "knowledge_gap_detection"
+        ]
+    }
 
 
 if os.getenv("NODE_ENV") != "development":

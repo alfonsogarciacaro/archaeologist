@@ -37,6 +37,10 @@ class Settings:
         
         # LLM Configuration
         self.LLM_API_URL = os.getenv("LLM_API_URL")
+        self.LLM_API_KEY = os.getenv("LLM_API_KEY")
+        self.LLM_MODEL = os.getenv("LLM_MODEL")
+        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER")
+        
         if self.LLM_API_URL is None:
             raise ValueError("LLM_API_URL environment variable is required")
         
