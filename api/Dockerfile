@@ -37,9 +37,6 @@ COPY ui/ ./ui/
 # Build frontend static files
 RUN cd ui && npm run build
 
-# Expose port
 EXPOSE 8000
 
-# For development: use reload and serve frontend dev server
-# For production: serve static files and API
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000

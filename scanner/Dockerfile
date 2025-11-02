@@ -24,8 +24,6 @@ RUN /root/.cargo/bin/uv pip sync uv.lock
 # Copy scanner application code (excluding tests for production)
 COPY scanner/app .
 
-# Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
