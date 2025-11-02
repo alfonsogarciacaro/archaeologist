@@ -20,4 +20,5 @@ dependencies = [
     "opentelemetry-instrumentation-requests==0.42b0",
     "opentelemetry-semantic-conventions==0.42b0",
     "qdrant-client==1.7.0",
+    "aiofiles>=23.0.0",
 ]
