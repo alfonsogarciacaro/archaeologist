@@ -30,11 +30,19 @@ class ApiClient {
     const token = this.getToken();
 
     // Add authentication header if token exists
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-      ...options.headers,
-    };
+    const headers: Record<string, string> = {};
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Set Content-Type to JSON only for non-FormData requests
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    // Merge with any additional headers
+    Object.assign(headers, options.headers);
 
     const response = await fetch(url, {
       ...options,
@@ -254,6 +262,53 @@ class ApiClient {
 
     if (!response.ok) {
       throw new Error('Failed to remove user from project');
+    }
+
+    return response.json();
+  }
+
+  async uploadProjectFiles(projectId: number, files: File[], metadata?: string | null) {
+    const formData = new FormData();
+
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    if (metadata) {
+      formData.append('metadata', metadata);
+    }
+
+    const response = await this.request(`/projects/${projectId}/upload`, {
+      method: 'POST',
+      body: formData,
+      // Don't set Content-Type header, let browser set it with boundary for FormData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to upload files');
+    }
+
+    return response.json();
+  }
+
+  async getProjectSources(projectId: number) {
+    const response = await this.request(`/projects/${projectId}/sources`);
+
+    if (!response.ok) {
+      throw new Error('Failed to get project sources');
+    }
+
+    return response.json();
+  }
+
+  async deleteProjectSource(projectId: number, sourceId: number) {
+    const response = await this.request(`/projects/${projectId}/sources/${sourceId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete source');
     }
 
     return response.json();

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Loader, ArrowLeft, Folder } from 'lucide-react';
+import { Project } from '../App';
 import './Header.css';
 
 interface HeaderProps {
@@ -7,13 +8,15 @@ interface HeaderProps {
   isLoading: boolean;
   onBackToProjects?: () => void;
   currentView?: 'projects' | 'investigation';
+  currentProject?: Project | null;
 }
 
-const Header: React.FC<HeaderProps> = ({ 
-  onInvestigate, 
-  isLoading, 
+const Header: React.FC<HeaderProps> = ({
+  onInvestigate,
+  isLoading,
   onBackToProjects,
-  currentView = 'investigation' 
+  currentView = 'investigation',
+  currentProject
 }) => {
   const [query, setQuery] = useState('');
 
@@ -44,7 +47,15 @@ const Header: React.FC<HeaderProps> = ({
               <span>Projects</span>
             </div>
           )}
-          <h1 className="title">Enterprise Code Archaeologist</h1>
+          <div className="title-section">
+            <h1 className="title">Enterprise Code Archaeologist</h1>
+            {currentProject && currentView === 'investigation' && (
+              <div className="current-project">
+                <span className="project-label">Project:</span>
+                <span className="project-name">{currentProject.name}</span>
+              </div>
+            )}
+          </div>
         </div>
         
         {currentView === 'investigation' && (

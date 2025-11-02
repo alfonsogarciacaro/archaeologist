@@ -2,21 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { apiClient } from '../utils/apiClient';
 import { useAuth } from '../contexts/AuthContext';
 import CreateProjectModal from './CreateProjectModal';
+import { Project } from '../App';
 import './ProjectList.css';
 
-interface Project {
-  id: number;
-  name: string;
-  description: string | null;
-  repository_paths: string[] | null;
-  is_active: boolean;
-  created_by: number;
-  created_at: string;
-  updated_at: string;
-}
-
 interface ProjectListProps {
-  onOpenProject: () => void;
+  onOpenProject: (project: Project) => void;
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({ onOpenProject }) => {
@@ -146,7 +136,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onOpenProject }) => {
               </div>
               
               <div className="project-actions">
-                <button className="open-project-btn" onClick={onOpenProject}>
+                <button className="open-project-btn" onClick={() => onOpenProject(project)}>
                   Open Project
                 </button>
               </div>

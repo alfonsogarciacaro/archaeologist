@@ -48,11 +48,34 @@
   color: rgba(255, 255, 255, 0.8);
 }
 
+.title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .title {
   margin: 0;
   font-size: 24px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.current-project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.project-label {
+  font-weight: 500;
+}
+
+.project-name {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* Responsive adjustments */
@@ -72,6 +95,10 @@
   .title {
     font-size: 20px;
   }
+
+  .current-project {
+    font-size: 12px;
+  }
   
   .search-form {
     max-width: none;
@@ -85,6 +112,10 @@
   
   .title {
     font-size: 18px;
+  }
+
+  .current-project {
+    font-size: 11px;
   }
   
   .back-button span,
