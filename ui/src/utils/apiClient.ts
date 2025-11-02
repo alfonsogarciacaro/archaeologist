@@ -16,7 +16,8 @@ class ApiClient {
 
   private async request(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    extraOptions?: { isRefresh?: boolean }
   ): Promise<Response> {
     const url = `${this.baseUrl}${endpoint}`;
     const token = this.getToken();
@@ -33,8 +34,8 @@ class ApiClient {
       headers,
     });
 
-    // Handle 401 Unauthorized - try to refresh token
-    if (response.status === 401 && token) {
+    // Handle 401 Unauthorized - try to refresh token (unless this is already a refresh request)
+    if (response.status === 401 && token && !extraOptions?.isRefresh) {
       try {
         await this.refreshToken();
         // Retry original request with new token
@@ -65,17 +66,13 @@ class ApiClient {
       throw new Error('No token to refresh');
     }
 
-    const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+    const response = await this.request('/auth/refresh', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
       body: JSON.stringify({
         refresh_token: token,
       }),
       credentials: 'include', // Important for cookies
-    });
+    }, { isRefresh: true }); // Prevent infinite refresh loop
 
     if (!response.ok) {
       throw new Error('Token refresh failed');
@@ -92,11 +89,8 @@ class ApiClient {
 
   // Authentication endpoints
   async login(username: string, password: string) {
-    const response = await fetch(`${this.baseUrl}/auth/login-anonymous`, {
+    const response = await this.request('/auth/login-anonymous', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ username, password }),
       credentials: 'include', // Important for cookies
     });
