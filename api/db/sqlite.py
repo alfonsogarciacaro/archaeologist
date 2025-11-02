@@ -41,6 +41,9 @@ class SQLiteDatabase(DatabaseAbc):
         """Initialize SQLite database and create tables."""
         self._conn = await connect(self.db_path)
         
+        # Set row_factory to return dictionaries
+        self._conn.row_factory = lambda cursor, row: {col[0]: row[idx] for idx, col in enumerate(cursor.description)} # type: ignore
+        
         # Enable foreign key constraints
         await self._conn.execute("PRAGMA foreign_keys = ON")
         

@@ -121,17 +121,14 @@ async def refresh_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database connection error"
         )
-    try:
-        user = await db.get_user_by_id(token_data["user_id"])
-        if not user or not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found or inactive",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    finally:
-        if 'db' in locals():
-            await db.close()
+    
+    user = await db.get_user_by_id(token_data["user_id"])
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # Generate new access token
     new_token = auth_service.create_user_token(user)
