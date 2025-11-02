@@ -99,94 +99,86 @@ async def investigate_change(request: InvestigationRequest):
     """
     Investigate the impact of a proposed change across the enterprise system.
     
-    This is currently a placeholder that returns dummy data for testing the UI.
-    The real implementation will:
-    1. Use the Code Scanner to find literal matches
-    2. Use the RAG Engine to find semantic matches  
-    3. Apply guardrails to validate results
-    4. Return a comprehensive impact report
+    This endpoint uses the LLM provider to analyze the change and identify
+    potentially affected components, dependencies, and knowledge gaps.
     """
     # Note: Automatic HTTP tracing is handled by middleware
     # Business logic tracing can be added here if needed
     
-    # Placeholder response for testing the UI
-    dummy_nodes = [
-        {
-            "id": "1",
-            "name": "schema.sql",
-            "type": "db_table",
-            "path": "/mock_enterprise/data_lake/db_schemas/schema.sql",
-            "source_type": "snapshot",
-            "confidence": 1.0,
-            "last_updated": "2023-10-27"
-        },
-        {
-            "id": "2", 
-            "name": "user-service",
-            "type": "repo",
-            "path": "/mock_enterprise/live_repos/user-service.git",
-            "source_type": "live_repo",
-            "confidence": 0.9
-        },
-        {
-            "id": "3",
-            "name": "reporting-service",
-            "type": "repo", 
-            "path": "/mock_enterprise/live_repos/reporting-service.git",
-            "source_type": "live_repo",
-            "confidence": 0.8
-        },
-        {
-            "id": "4",
-            "name": "term_sheet_generator.vba",
-            "type": "file",
-            "path": "/mock_enterprise/data_lake/finance_macros/2023-10-27/term_sheet_generator.vba",
-            "source_type": "snapshot", 
-            "confidence": 0.7,
-            "last_updated": "2023-10-27"
-        }
-    ]
-    
-    dummy_edges = [
-        {
-            "source": "1",
-            "target": "2",
-            "confidence": 1.0,
-            "relationship_type": "literal",
-            "evidence": "Found 'term_sheet_id VARCHAR(50)' in schema.sql"
-        },
-        {
-            "source": "2",
-            "target": "3",
-            "confidence": 0.8,
-            "relationship_type": "semantic",
-            "evidence": "Both services reference term_sheet_id field"
-        },
-        {
-            "source": "3",
-            "target": "4",
-            "confidence": 0.6,
-            "relationship_type": "potential",
-            "evidence": "Reporting service exports data used by Excel macros"
-        }
-    ]        
-    
-    dummy_knowledge_gaps = [
-        {
-            "component": "external-payment-api",
-            "missing_information": "API schema for payment processing",
-            "required_action": "Request API documentation from Payments Team",
-            "estimated_impact": "Medium - payment processing may be affected"
-        }
-    ]
-    
-    return ImpactReport(
-        query=request.query,
-        nodes=[DependencyNode(**node) for node in dummy_nodes],
-        edges=[DependencyEdge(**edge) for edge in dummy_edges],
-        knowledge_gaps=[KnowledgeGap(**gap) for gap in dummy_knowledge_gaps],
-        summary=f"Found 4 components potentially impacted by: {request.query}"
-    )
+    try:
+        # Get the LLM provider and investigate the change
+        llm_provider = await get_llm_provider()
+        investigation_result = await llm_provider.investigate_change(request.query)
+        
+        # Convert the LLM response to our ImpactReport format
+        nodes = []
+        for node_data in investigation_result.get("nodes", []):
+            # Ensure the node has all required fields
+            node = {
+                "id": node_data.get("id", ""),
+                "name": node_data.get("name", ""),
+                "type": node_data.get("type", node_data.get("component_type", "unknown")),
+                "path": node_data.get("path", node_data.get("file_path", "")),
+                "source_type": node_data.get("source_type", "unknown"),
+                "confidence": node_data.get("confidence", 0.5),
+                "last_updated": node_data.get("last_updated")
+            }
+            nodes.append(DependencyNode(**node))
+        
+        edges = []
+        for edge_data in investigation_result.get("edges", []):
+            # Ensure the edge has all required fields
+            edge = {
+                "source": edge_data.get("source", ""),
+                "target": edge_data.get("target", ""),
+                "confidence": edge_data.get("confidence", 0.5),
+                "relationship_type": edge_data.get("relationship_type", "unknown"),
+                "evidence": edge_data.get("evidence", "")
+            }
+            edges.append(DependencyEdge(**edge))
+        
+        knowledge_gaps = []
+        for gap_data in investigation_result.get("knowledge_gaps", []):
+            # Ensure the knowledge gap has all required fields
+            gap = {
+                "component": gap_data.get("component", ""),
+                "missing_information": gap_data.get("missing_information", ""),
+                "required_action": gap_data.get("required_action", ""),
+                "estimated_impact": gap_data.get("estimated_impact", "")
+            }
+            knowledge_gaps.append(KnowledgeGap(**gap))
+        
+        # Create the impact report
+        return ImpactReport(
+            query=request.query,
+            nodes=nodes,
+            edges=edges,
+            knowledge_gaps=knowledge_gaps,
+            summary=investigation_result.get("summary", f"Analysis completed for: {request.query}"),
+            explanation=investigation_result.get("explanation"),
+            recommendations=investigation_result.get("recommendations", [])
+        )
+        
+    except Exception as e:
+        logger.error(f"Error during investigation: {str(e)}")
+        # Return a minimal impact report with error information
+        return ImpactReport(
+            query=request.query,
+            nodes=[],
+            edges=[],
+            knowledge_gaps=[KnowledgeGap(
+                component="llm_service",
+                missing_information=f"LLM service error: {str(e)}",
+                required_action="Check LLM service configuration and availability",
+                estimated_impact="High - investigation cannot proceed"
+            )],
+            summary=f"Investigation failed due to error: {str(e)}",
+            explanation={
+                "reasoning_steps": [f"Error occurred during investigation: {str(e)}"],
+                "evidence_sources": [],
+                "confidence_score": 0.0
+            }
+        )
 
 @api_v1_router.get("/investigation-status")
 async def investigation_status():
@@ -202,19 +194,43 @@ async def investigation_status():
     except Exception as e:
         scanner_status = f"unavailable: {str(e)}"
     
+    # Check LLM provider status
+    try:
+        llm_provider = await get_llm_provider()
+        llm_status = await llm_provider.health_check()
+        llm_provider_type = settings.LLM_PROVIDER or "unknown"
+    except Exception as e:
+        llm_status = {"status": f"unavailable: {str(e)}"}
+        llm_provider_type = settings.LLM_PROVIDER or "unknown"
+    
+    # Determine capabilities based on provider
+    capabilities = [
+        "literal_search",
+        "dependency_analysis",
+        "knowledge_gap_detection"
+    ]
+    
+    if llm_provider_type == "ollama":
+        capabilities.append("ollama_reasoning")
+        capabilities.append("tool_calling")
+    elif llm_provider_type == "mock":
+        capabilities.append("mock_llm_reasoning")
+    else:
+        capabilities.append("llm_reasoning")
+    
     return {
         "status": "healthy",
         "components": {
             "api": "healthy",
-            "mock_llm": "healthy",
+            "llm": {
+                "provider": llm_provider_type,
+                "status": llm_status.get("status", "unknown"),
+                "model": settings.LLM_MODEL or "unknown",
+                "api_url": settings.LLM_API_URL or "unknown"
+            },
             "scanner": scanner_status
         },
-        "capabilities": [
-            "literal_search",
-            "dependency_analysis",
-            "mock_llm_reasoning",
-            "knowledge_gap_detection"
-        ]
+        "capabilities": capabilities
     }
 
 
