@@ -97,24 +97,3 @@ class AuthService:
 
 # Global auth service instance
 auth_service = AuthService()
-
-
-# Anonymous user for prototype
-ANONYMOUS_USER = User(
-    id=1,
-    username="anonymous",
-    email="anonymous@archaeologist.local",
-    hashed_password="$2b$12$placeholder_hash_for_anonymous_user_account_no_real_password",
-    is_active=True,
-    is_admin=False
-)
-
-
-def get_anonymous_token() -> str:
-    """Get a JWT token for the anonymous user."""
-    return auth_service.create_user_token(ANONYMOUS_USER)
-
-
-def authenticate_anonymous() -> tuple[User, str]:
-    """Authenticate the anonymous user for prototype access."""
-    return ANONYMOUS_USER, get_anonymous_token()

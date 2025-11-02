@@ -193,14 +193,36 @@ class SQLiteDatabase(DatabaseAbc):
         
         for key, value, description, is_sensitive in default_configs:
             await self.set_config_value(key, value)
+        
+        # Create anonymous user if it doesn't exist
+        await self._ensure_anonymous_user()
+    
+    async def _ensure_anonymous_user(self) -> None:
+        """Ensure the anonymous user exists in the database."""
+        conn = self._get_connection()
+        
+        # Check if anonymous user already exists
+        cursor = await conn.execute("SELECT id FROM users WHERE username = 'anonymous'")
+        existing_user = await cursor.fetchone()
+        
+        if not existing_user:
+            # Create the anonymous user with the same hash as in auth_service
+            await conn.execute(
+                """INSERT INTO users (username, email, hashed_password, is_active, is_admin) 
+                   VALUES (?, ?, ?, ?, ?)""",
+                ("anonymous", "anonymous@archaeologist.local", 
+                 "$2b$12$placeholder_hash_for_anonymous_user_account_no_real_password", 
+                 True, False)
+            )
+            await conn.commit()
     
     # User management
-    async def create_user(self, username: str, email: str, hashed_password: str) -> User:
+    async def create_user(self, username: str, email: str, hashed_password: str, is_admin: bool = False) -> User:
         """Create a new user."""
         conn = self._get_connection()
         cursor = await conn.execute(
-            "INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)",
-            (username, email, hashed_password)
+            "INSERT INTO users (username, email, hashed_password, is_admin) VALUES (?, ?, ?, ?)",
+            (username, email, hashed_password, is_admin)
         )
         await conn.commit()
         
@@ -243,6 +265,16 @@ class SQLiteDatabase(DatabaseAbc):
         )
         row = await cursor.fetchone()
         return User(**row) if row else None
+    
+    async def update_user_last_login(self, user_id: int) -> bool:
+        """Update the last login timestamp for a user."""
+        conn = self._get_connection()
+        cursor = await conn.execute(
+            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+            (user_id,)
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
     
     # Project management
     async def create_project(

@@ -13,7 +13,7 @@ import './App.css';
 import './index.css';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, isLoading: authLoading, needsLogin } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [currentView, setCurrentView] = useState<'projects' | 'investigation'>('projects');
   const [impactReport, setImpactReport] = useState<ImpactReport | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -54,13 +54,13 @@ const AppContent: React.FC = () => {
   }
 
   // Show login screen if authentication failed and needs login
-  if (needsLogin) {
-    return (
-      <div className="app login-screen">
-        <LoginPage />
-      </div>
-    );
-  }
+  // if (needsLogin) {
+  //   return (
+  //     <div className="app login-screen">
+  //       <LoginPage />
+  //     </div>
+  //   );
+  // }
 
   // Show loading screen while logging in
   if (!authLoading && !isAuthenticated) {

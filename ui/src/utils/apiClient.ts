@@ -1,7 +1,9 @@
-import { tokenProvider } from './authState';
+type User = any // TODO
 
 class ApiClient {
   private baseUrl: string;
+  private currentToken: string | null = null;
+  private currentUser: User = null;
 
   constructor() {
     // Use relative path - Vite automatically proxies /api to backend in development
@@ -10,8 +12,13 @@ class ApiClient {
   }
 
   private getToken(): string | null {
-    // Get token from secure module-scoped provider (not window object)
-    return tokenProvider.getToken();
+    // Get token from memory
+    return this.currentToken;
+  }
+
+  private setToken(token: string, user: User) {
+    this.currentToken = token;
+    this.currentUser = user;
   }
 
   private async request(
@@ -35,7 +42,7 @@ class ApiClient {
     });
 
     // Handle 401 Unauthorized - try to refresh token (unless this is already a refresh request)
-    if (response.status === 401 && token && !extraOptions?.isRefresh) {
+    if (response.status === 401 && !extraOptions?.isRefresh) {
       try {
         await this.refreshToken();
         // Retry original request with new token
@@ -51,9 +58,20 @@ class ApiClient {
           headers: newHeaders,
         });
       } catch (refreshError) {
-        // Refresh failed - will be handled by AuthContext
-        // For prototype, this triggers automatic re-login as anonymous
-        throw refreshError;
+        // Refresh failed - try anonymous login as fallback
+        await this.login("anonymous", "anonymous");
+        // Retry with anonymous token
+        const anonToken = this.getToken();
+        const anonHeaders = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonToken}`,
+          ...options.headers,
+        };
+
+        return fetch(url, {
+          ...options,
+          headers: anonHeaders,
+        });
       }
     }
 
@@ -61,55 +79,43 @@ class ApiClient {
   }
 
   private async refreshToken(): Promise<void> {
-    const token = this.getToken();
-    if (!token) {
-      throw new Error('No token to refresh');
-    }
-
     const response = await this.request('/auth/refresh', {
       method: 'POST',
-      body: JSON.stringify({
-        refresh_token: token,
-      }),
-      credentials: 'include', // Important for cookies
-    }, { isRefresh: true }); // Prevent infinite refresh loop
+      credentials: 'include', // Important for HttpOnly cookies
+    }, { isRefresh: true });
 
     if (!response.ok) {
       throw new Error('Token refresh failed');
     }
 
     const data = await response.json();
-    
-    // Update token through AuthContext (not localStorage)
-    const authState = (window as any).__ARCHAEOLOGIST_AUTH_STATE__;
-    if (authState?.setAuthState) {
-      authState.setAuthState(data.access_token, data.user);
-    }
+    this.setToken(data.access_token, data.user);
   }
 
   // Authentication endpoints
-  async login(username: string, password: string) {
-    const response = await this.request('/auth/login-anonymous', {
+  async login(username: string, password: string): Promise<any> {
+    const response = await this.request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
-      credentials: 'include', // Important for cookies
+      credentials: 'include',
     });
 
     if (!response.ok) {
       throw new Error('Login failed');
     }
 
-    return response.json();
+    const data = await response.json();
+    this.setToken(data.access_token, data.user);
+    return data.user;
+  }  
+
+
+  getCurrentUser(): any {
+    return this.currentUser;
   }
 
-  async getCurrentUser() {
-    const response = await this.request('/auth/me');
-    
-    if (!response.ok) {
-      throw new Error('Failed to get current user');
-    }
-
-    return response.json();
+  isAuthenticated(): boolean {
+    return !!this.currentToken && !!this.currentUser;
   }
 
   async validateToken() {
@@ -251,6 +257,34 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // Public methods for AuthContext
+  async initialize(): Promise<{ user: User; isAuthenticated: boolean }> {
+    try {
+      // Try to refresh using existing cookie
+      await this.refreshToken();
+      return {
+        user: this.currentUser,
+        isAuthenticated: true
+      };
+    } catch (refreshError) {
+      // No valid refresh token, try anonymous login
+      // TODO: After prototype we redirect to login page
+      try {
+        await this.login("anonymous", "anonymous");
+        return {
+          user: this.currentUser,
+          isAuthenticated: true
+        };
+      } catch (anonError) {
+        // Both failed - no authentication
+        return {
+          user: null,
+          isAuthenticated: false
+        };
+      }
+    }
   }
 }
 

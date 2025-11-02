@@ -260,12 +260,10 @@ async def investigation_status():
 
 
 # Include all routers under the API v1 router
-from .routes.database import database_router
 from .routes.auth import router as auth_router
 from .routes.projects import router as projects_router
 
 # Include all routers under the /api/v1 prefix
-api_v1_router.include_router(database_router)
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(projects_router)
 

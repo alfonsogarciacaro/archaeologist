@@ -1,12 +1,10 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Response
+from fastapi import APIRouter, HTTPException, status, Depends, Response, Cookie
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from typing import Optional
 
 from app.auth_service import (
-    auth_service, 
-    authenticate_anonymous,
-    get_anonymous_token
+    auth_service
 )
 from dependencies.auth import get_current_user, get_optional_user
 from dependencies.database import get_database
@@ -41,42 +39,32 @@ async def login(
     db: DatabaseAbc = Depends(get_database)
 ):
     """
-    Login user and return JWT token.
+    Authenticate user with username/password and return JWT token.
     
-    For the prototype, this always returns the anonymous user regardless
-    of credentials provided.
+    Supports regular user authentication and anonymous login.
     """
-    # For prototype, always authenticate as anonymous
-    user, token = authenticate_anonymous()
+    username = login_data.username
+    password = login_data.password
     
-    # Set refresh token as HttpOnly cookie (for production - prototype uses JWT only)
-    response.set_cookie(
-        key="refresh_token",
-        value=token,  # In production, this would be separate refresh token
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60  # Convert days to seconds
-    )
-    
-    # Update last login time (would normally check credentials first)
-    # await db.update_user_last_login(user.id)
-    
-    return TokenResponse(
-        access_token=token,
-        token_type="bearer",
-        user=user
-    )
+    # Regular user authentication
+    user = await db.get_user_by_username(username)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-
-@router.post("/login-anonymous", response_model=TokenResponse)
-async def login_anonymous_endpoint(response: Response):
-    """
-    Authenticate as anonymous user for prototype access.
+    # Verify password
+    if username != "anonymous" and not auth_service.verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
-    This endpoint provides immediate access without requiring credentials.
-    """
-    user, token = authenticate_anonymous()
+    # Generate JWT token for authenticated user
+    token = auth_service.create_user_token(user)
     
     # Set refresh token as HttpOnly cookie
     response.set_cookie(
@@ -85,8 +73,11 @@ async def login_anonymous_endpoint(response: Response):
         httponly=True,
         secure=True,
         samesite="strict",
-        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60  # Convert days to seconds
+        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60
     )
+    
+    # Update last login time
+    # await db.update_user_last_login(user.id)
     
     return TokenResponse(
         access_token=token,
@@ -98,16 +89,52 @@ async def login_anonymous_endpoint(response: Response):
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     response: Response,
-    current_user: User = Depends(get_current_user)
+    refresh_token: Optional[str] = Cookie(None, alias="refresh_token")
 ):
     """
-    Refresh JWT token using a valid token.
+    Refresh JWT token using refresh token from HttpOnly cookie.
     
-    For the prototype, this always returns a new anonymous token.
+    If no refresh token or invalid token, returns 401 error.
+    Frontend should handle this by attempting to login as anonymous.
     """
-    # For prototype, just return a new anonymous token
-    # In production, this would validate refresh token cookie
-    user, new_token = authenticate_anonymous()
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token provided",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify the refresh token (for JWT stateless, treat same as access token)
+    token_data = auth_service.verify_token(refresh_token)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user from database
+    from dependencies.database import get_database
+    db = await get_database()
+    if not db:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database connection error"
+        )
+    try:
+        user = await db.get_user_by_id(token_data["user_id"])
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or inactive",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    finally:
+        if 'db' in locals():
+            await db.close()
+    
+    # Generate new access token
+    new_token = auth_service.create_user_token(user)
     
     # Set new refresh token cookie
     response.set_cookie(
@@ -116,7 +143,7 @@ async def refresh_token(
         httponly=True,
         secure=True,
         samesite="strict",
-        max_age=auth_service.access_token_expire_minutes * 60  # Convert minutes to seconds
+        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60
     )
     
     return TokenResponse(
@@ -126,25 +153,70 @@ async def refresh_token(
     )
 
 
-@router.get("/me", response_model=User)
-async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
-):
-    """Get current authenticated user information."""
-    return current_user
+class RegisterRequest(BaseModel):
+    """User registration request model."""
+    username: str
+    email: str
+    password: str
+    
+    class Config:
+        str_strip_whitespace = True
+        min_anystr_length = 3
 
 
-@router.get("/me/optional")
-async def get_optional_user_info(
-    current_user: Optional[User] = Depends(get_optional_user)
+@router.post("/register", response_model=TokenResponse)
+async def register(
+    register_data: RegisterRequest,
+    response: Response,
+    db: DatabaseAbc = Depends(get_database)
 ):
-    """Get current user information if authenticated, otherwise anonymous."""
-    if current_user:
-        return {"user": current_user, "authenticated": True}
-    else:
-        # Return anonymous user info
-        anon_user, _ = authenticate_anonymous()
-        return {"user": anon_user, "authenticated": False}
+    """
+    Register a new user and return JWT token.
+    
+    Creates a new user with the provided credentials and immediately
+    authenticates them by returning a JWT token.
+    """
+    # Check if user already exists
+    existing_user = await db.get_user_by_username(register_data.username)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+    
+    existing_email = await db.get_user_by_email(register_data.email)
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already exists"
+        )
+    
+    # Create new user (hash password before passing to database)
+    hashed_password = auth_service.get_password_hash(register_data.password)
+    user = await db.create_user(
+        username=register_data.username,
+        email=register_data.email,
+        hashed_password=hashed_password
+    )
+    
+    # Generate JWT token for the new user
+    token = auth_service.create_user_token(user)
+    
+    # Set refresh token as HttpOnly cookie
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=auth_service.refresh_token_expire_days * 24 * 60 * 60
+    )
+    
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user=user
+    )
 
 
 @router.post("/logout")
@@ -161,7 +233,7 @@ async def logout(
     # In a real implementation, you would:
     # 1. Add the token to a blacklist
     # 2. Clear the refresh token cookie
-    # response.delete_cookie("refresh_token")
+    response.delete_cookie("refresh_token")
     
     return {"message": "Successfully logged out"}
 
@@ -177,21 +249,4 @@ async def validate_token(
         "valid": True,
         "user": current_user,
         "message": "Token is valid"
-    }
-
-
-# Public endpoint that doesn't require authentication
-@router.get("/public/token")
-async def get_public_token():
-    """
-    Get a public access token for prototype usage.
-    
-    This endpoint provides a way to get a valid JWT token without
-    any authentication checks, suitable for prototype development.
-    """
-    token = get_anonymous_token()
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": auth_service.access_token_expire_minutes * 60  # Use configured expiration time
     }

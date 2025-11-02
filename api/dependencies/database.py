@@ -13,10 +13,10 @@ from app.config import get_settings
 
 
 # Global database instance
-_db_instance: DatabaseAbc = None
+_db_instance: DatabaseAbc | None = None
 
 
-async def get_database() -> AsyncGenerator[DatabaseAbc, None]:
+async def get_database() -> DatabaseAbc | None:
     """Get database instance as a FastAPI dependency."""
     global _db_instance
     
@@ -29,7 +29,7 @@ async def get_database() -> AsyncGenerator[DatabaseAbc, None]:
         await _db_instance.initialize()
     
     try:
-        yield _db_instance
+        return _db_instance
     except Exception:
         # Database error handling if needed
         pass
