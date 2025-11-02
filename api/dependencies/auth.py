@@ -36,7 +36,8 @@ async def get_current_user(
         )
     
     # Get user from database
-    user = await db.get_user_by_id(token_data["user_id"])
+    user_id = int(token_data.get("sub", -1))
+    user = await db.get_user_by_id(user_id)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -47,6 +48,25 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> int:
+    """Get the current authenticated user ID without database lookup."""
+    
+    # Verify JWT token
+    token_data = auth_service.verify_token(credentials.credentials)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired session token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Extract user_id directly from token
+    user_id = token_data.get("user_id") or int(token_data.get("sub", -1))
+    return user_id
+
+# TODO: extract the is_admin claim from the token to avoid DB lookup
 async def get_current_admin_user(
     current_user: User = Depends(get_current_user)
 ) -> User:
@@ -74,31 +94,10 @@ async def get_optional_user(
             return None
         
         # Get user from database
-        user = await db.get_user_by_id(token_data["user_id"])
+        user_id = int(token_data.get("sub", -1))
+        user = await db.get_user_by_id(user_id)
         return user if user and user.is_active else None
         
     except HTTPException:
         return None
 
-
-async def get_anonymous_user() -> User:
-    """Get the anonymous user for prototype access."""
-    # This bypasses authentication entirely for prototype
-    from app.auth_service import ANONYMOUS_USER
-    return ANONYMOUS_USER
-
-
-async def get_current_user_or_anonymous(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: DatabaseAbc = Depends(get_database)
-) -> User:
-    """Get current authenticated user, or anonymous user if no token provided."""
-    try:
-        if credentials:
-            # Try to get authenticated user
-            return await get_current_user(credentials, db)
-    except HTTPException:
-        pass
-    
-    # Fall back to anonymous user
-    return await get_anonymous_user()

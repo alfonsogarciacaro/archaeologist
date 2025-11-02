@@ -10,10 +10,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user_id
 from dependencies.database import get_database
 from db import DatabaseAbc
-from models.database import User, Project, ProjectUser, ProjectRole
+from models.database import ProjectRole
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -69,7 +69,7 @@ class UserWithRole(BaseModel):
 
 async def check_project_access(
     project_id: int,
-    user: User,
+    user_id: int,
     db: DatabaseAbc,
     required_roles: List[str] | None = None
 ) -> str:
@@ -78,7 +78,7 @@ async def check_project_access(
     
     Args:
         project_id: ID of the project
-        user: Current user
+        user_id: Current user ID
         db: Database instance
         required_roles: List of roles that can access (None for any role)
     
@@ -90,7 +90,7 @@ async def check_project_access(
     """
 
 
-    user_role = await db.get_user_project_role(project_id, user.id)
+    user_role = await db.get_user_project_role(project_id, user_id)
     
     if not user_role:
         raise HTTPException(
@@ -110,7 +110,7 @@ async def check_project_access(
 @router.post("/", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Create a new project."""
@@ -118,7 +118,7 @@ async def create_project(
         name=project_data.name,
         description=project_data.description,
         repository_paths=project_data.repository_paths,
-        created_by=current_user.id
+        created_by=current_user_id
     )
     
     return ProjectResponse(
@@ -134,17 +134,17 @@ async def create_project(
     )
 
 
-@router.get("/", response_model=List[ProjectResponse])
+@router.get("", response_model=List[ProjectResponse])
 async def get_user_projects(
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Get all projects accessible to the current user."""
-    projects = await db.get_user_projects(current_user.id)
+    projects = await db.get_user_projects(current_user_id)
     
     project_responses = []
     for project in projects:
-        user_role = await db.get_user_project_role(project.id, current_user.id)
+        user_role = await db.get_user_project_role(project.id, current_user_id)
         
         project_responses.append(ProjectResponse(
             id=project.id,
@@ -164,12 +164,12 @@ async def get_user_projects(
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Get a specific project by ID."""
     # Check user access
-    user_role = await check_project_access(project_id, current_user, db)
+    user_role = await check_project_access(project_id, current_user_id, db)
     
     project = await db.get_project_by_id(project_id)
     if not project:
@@ -195,13 +195,13 @@ async def get_project(
 async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Update a project."""
     # Check user has admin or owner role
     user_role = await check_project_access(
-        project_id, current_user, db, 
+        project_id, current_user_id, db, 
         [ProjectRole.OWNER, ProjectRole.ADMIN]
     )
     
@@ -243,13 +243,13 @@ async def update_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Delete (deactivate) a project."""
     # Only owners can delete projects
     await check_project_access(
-        project_id, current_user, db, 
+        project_id, current_user_id, db, 
         [ProjectRole.OWNER]
     )
     
@@ -261,12 +261,12 @@ async def delete_project(
 @router.get("/{project_id}/users", response_model=List[UserWithRole])
 async def get_project_users(
     project_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Get all users in a project."""
     # Check user access
-    user_role = await check_project_access(project_id, current_user, db)
+    user_role = await check_project_access(project_id, current_user_id, db)
     
     project_users = await db.get_project_users(project_id)
     
@@ -290,13 +290,13 @@ async def get_project_users(
 async def add_user_to_project(
     project_id: int,
     add_data: ProjectUserAdd,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Add a user to a project."""
     # Check user has admin or owner role
     await check_project_access(
-        project_id, current_user, db, 
+        project_id, current_user_id, db, 
         [ProjectRole.OWNER, ProjectRole.ADMIN]
     )
     
@@ -335,13 +335,13 @@ async def update_user_project_role(
     project_id: int,
     user_id: int,
     update_data: ProjectUserUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Update a user's role in a project."""
     # Only owners can change roles
     await check_project_access(
-        project_id, current_user, db, 
+        project_id, current_user_id, db, 
         [ProjectRole.OWNER]
     )
     
@@ -353,7 +353,7 @@ async def update_user_project_role(
         )
     
     # Cannot change own role
-    if user_id == current_user.id:
+    if user_id == current_user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot change your own role"
@@ -377,14 +377,14 @@ async def update_user_project_role(
 async def remove_user_from_project(
     project_id: int,
     user_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
     """Remove a user from a project."""
     # Check user has admin or owner role (or is removing self)
-    user_role = await check_project_access(project_id, current_user, db)
+    user_role = await check_project_access(project_id, current_user_id, db)
     
-    if user_id != current_user.id and user_role not in [ProjectRole.OWNER, ProjectRole.ADMIN]:
+    if user_id != current_user_id and user_role not in [ProjectRole.OWNER, ProjectRole.ADMIN]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins or owners can remove other users"

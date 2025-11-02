@@ -6,7 +6,7 @@ from typing import Optional
 from app.auth_service import (
     auth_service
 )
-from dependencies.auth import get_current_user, get_optional_user
+from dependencies.auth import get_current_user, get_current_user_id, get_optional_user
 from dependencies.database import get_database
 from db import DatabaseAbc
 from models.database import User
@@ -219,7 +219,7 @@ async def register(
 @router.post("/logout")
 async def logout(
     response: Response,
-    current_user: User = Depends(get_current_user)
+    current_user_id: int = Depends(get_current_user_id)
 ):
     """
     Logout current user.

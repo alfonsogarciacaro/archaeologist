@@ -71,7 +71,7 @@ from fastapi import APIRouter
 api_v1_router = APIRouter(prefix="/api/v1")
 
 # Import authentication dependencies
-from dependencies.auth import get_current_user_or_anonymous
+from dependencies.auth import get_current_user
 from models.database import User
 
 class InvestigationRequest(BaseModel):
@@ -119,7 +119,7 @@ async def health_check():
 @api_v1_router.post("/investigate", response_model=ImpactReport)
 async def investigate_change(
     request: InvestigationRequest,
-    current_user: User = Depends(get_current_user_or_anonymous)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Investigate the impact of a proposed change across the enterprise system.

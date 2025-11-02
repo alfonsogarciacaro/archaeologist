@@ -66,33 +66,33 @@ class AuthService:
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Verify and decode a JWT token."""
         try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            settings = get_settings()
+            payload = jwt.decode(
+                token, 
+                self.secret_key, 
+                algorithms=[self.algorithm],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER
+            )
             return payload
         except JWTError:
             return None
     
     def create_user_token(self, user: User) -> str:
         """Create a JWT token for a user."""
+        settings = get_settings()
+        now = datetime.now(timezone.utc)
+        
         token_data = {
+            # standard claims
             "sub": str(user.id),
-            "username": user.username,
-            "email": user.email,
+            "iss": settings.JWT_ISSUER,
+            "aud": settings.JWT_AUDIENCE,
+            "iat": int(now.timestamp()),
+            # custom claims
             "is_admin": user.is_admin
         }
         return self.create_access_token(data=token_data)
-    
-    def get_token_from_user_info(self, token: str) -> Optional[Dict[str, Any]]:
-        """Extract user information from JWT token."""
-        payload = self.verify_token(token)
-        if payload is None:
-            return None
-        
-        return {
-            "user_id": int(payload.get("sub", -1)),
-            "username": payload.get("username"),
-            "email": payload.get("email"),
-            "is_admin": payload.get("is_admin", False)
-        }
 
 
 # Global auth service instance

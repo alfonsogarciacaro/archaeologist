@@ -53,6 +53,8 @@ class Settings:
         self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
         self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 15))
         self.JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", 7))
+        self.JWT_ISSUER = os.getenv("JWT_ISSUER", "archaeologist-api")
+        self.JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "archaeologist-ui")
         
         # Telemetry Configuration
         self.OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "archaeologist-api")
