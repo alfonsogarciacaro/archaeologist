@@ -1,5 +1,6 @@
 __pycache__/
 node_modules/
+build/
 .venv/
 .claude/
 .debug_*.pid

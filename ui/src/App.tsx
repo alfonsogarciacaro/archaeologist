@@ -7,12 +7,14 @@ import DependencyGraph from './components/DependencyGraph';
 import InvestigationPanel from './components/InvestigationPanel';
 import ExplanationPanel from './components/ExplanationPanel';
 import KnowledgeGapsBanner from './components/KnowledgeGapsBanner';
+import ProjectList from './components/ProjectList';
 import { ImpactReport } from './types/types';
 import './App.css';
 import './index.css';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading: authLoading, needsLogin } = useAuth();
+  const [currentView, setCurrentView] = useState<'projects' | 'investigation'>('projects');
   const [impactReport, setImpactReport] = useState<ImpactReport | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,9 +74,25 @@ const AppContent: React.FC = () => {
     );
   }
 
+  // Show project list when authenticated
+  if (currentView === 'projects') {
+    return (
+      <div className="app projects-view">
+        <ProjectList 
+          onOpenProject={() => setCurrentView('investigation')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <Header onInvestigate={handleInvestigate} isLoading={isLoading} />
+      <Header 
+        onInvestigate={handleInvestigate} 
+        isLoading={isLoading} 
+        onBackToProjects={() => setCurrentView('projects')}
+        currentView={currentView}
+      />
       
       {impactReport?.knowledge_gaps && impactReport.knowledge_gaps.length > 0 && (
         <KnowledgeGapsBanner gaps={impactReport.knowledge_gaps} />
