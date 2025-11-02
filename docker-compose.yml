@@ -1,7 +1,7 @@
 services:
   api:
     build: 
-      context: ./api
+      context: .
       dockerfile: Dockerfile
     ports:
       - "${WEB_PORT}:8000"

@@ -1,3 +1,5 @@
+# Must be run with root dir as path context
+
 FROM ${CONTAINER_REGISTRY}/ubi9/python-311
 
 WORKDIR /app
@@ -21,9 +23,6 @@ RUN /root/.cargo/bin/uv pip sync uv.lock
 
 # Copy scanner application code (excluding tests for production)
 COPY scanner/app .
-
-# Copy mock enterprise data
-COPY scanner/mock_enterprise/ ./mock_enterprise/
 
 # Expose port
 EXPOSE 8000
