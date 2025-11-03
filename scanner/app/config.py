@@ -54,6 +54,19 @@ class Settings:
         self.LLM_MODEL = os.getenv("LLM_MODEL", "llama2")
         self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
 
+        # Redis Configuration
+        self.REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self.REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+        self.REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+        self.REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+        self.REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+
+        # Job Queue Configuration
+        self.JOB_QUEUE_NAME = os.getenv("JOB_QUEUE_NAME", "archaeologist_jobs")
+        self.JOB_RESULT_TTL = int(os.getenv("JOB_RESULT_TTL", "86400"))  # 24 hours
+        self.JOB_TIMEOUT = int(os.getenv("JOB_TIMEOUT", "3600"))  # 1 hour
+        self.JOB_POLL_INTERVAL = int(os.getenv("JOB_POLL_INTERVAL", "5"))  # seconds
+
 @lru_cache()
 def get_settings():
     return Settings()

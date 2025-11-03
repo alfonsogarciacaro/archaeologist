@@ -7,6 +7,8 @@ import os
 import sys
 import re
 import logging
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from .config import get_settings
 
@@ -34,7 +36,47 @@ logger = logging.getLogger(__name__)
 # Get settings and initialize telemetry
 settings = get_settings()
 
-app = FastAPI(title="Code Scanner Service", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events."""
+    # Startup
+    logger.info("Starting Code Scanner Service")
+
+    # Initialize job worker
+    try:
+        from .job_client import job_client
+        from .job_manager import job_manager
+
+        # Connect to Redis
+        await job_client.connect()
+
+        # Start job worker in background
+        worker_task = asyncio.create_task(
+            job_client.start_worker(job_manager.process_job)
+        )
+
+        # Store worker task for shutdown
+        app.state.worker_task = worker_task
+
+        logger.info("Job worker started successfully")
+    except Exception as e:
+        logger.warning(f"Failed to start job worker: {e}")
+        # Continue without job worker - processing will be disabled
+
+    yield
+    # Shutdown
+    logger.info("Shutting down Code Scanner Service")
+
+    # Stop job worker
+    try:
+        from .job_client import job_client
+        await job_client.stop_worker()
+        await job_client.disconnect()
+        logger.info("Job worker stopped")
+    except Exception as e:
+        logger.warning(f"Error stopping job worker: {e}")
+
+app = FastAPI(title="Code Scanner Service", version="1.0.0", lifespan=lifespan)
 
 # Add automatic tracing middleware
 # app.add_middleware(TracingMiddleware)
@@ -730,6 +772,219 @@ async def test_investigate():
         query="What happens if we change term_sheet_id from string to UUID?",
         use_mock=True
     )
-    
+
     return await investigate_change(test_request)
+
+
+# Job Management Endpoints
+
+class JobStatusResponse(BaseModel):
+    """Job status response model."""
+    job_id: str
+    status: str
+    progress_current: int
+    progress_total: int
+    progress_message: Optional[str] = None
+    worker_id: Optional[str] = None
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    result_data: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+
+class WorkerStatusResponse(BaseModel):
+    """Worker status response model."""
+    worker_id: str
+    is_running: bool
+    connected_to_redis: bool
+    uptime_seconds: Optional[float] = None
+    jobs_processed: Optional[int] = None
+
+
+@app.get("/jobs/status/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    """
+    Get the status of a specific job.
+
+    This endpoint allows the API service to check the status
+    of jobs that are being processed by the scanner.
+    """
+    logger.info(f"Getting status for job {job_id}")
+
+    try:
+        from .job_client import job_client
+
+        if not await job_client.is_connected():
+            raise HTTPException(status_code=503, detail="Job queue not available")
+
+        # Get job status from Redis
+        job_status = await job_client.redis_client.get(f"{settings.JOB_QUEUE_NAME}:running:{job_id}")
+
+        if not job_status:
+            # Check completed jobs
+            job_status = await job_client.redis_client.get(f"{settings.JOB_QUEUE_NAME}:completed:{job_id}")
+
+        if not job_status:
+            # Check failed jobs
+            job_status = await job_client.redis_client.get(f"{settings.JOB_QUEUE_NAME}:failed:{job_id}")
+
+        if not job_status:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        job_data = json.loads(job_status)
+
+        return JobStatusResponse(
+            job_id=job_data.get("id"),
+            status=job_data.get("status"),
+            progress_current=job_data.get("progress_current", 0),
+            progress_total=job_data.get("progress_total", 0),
+            progress_message=job_data.get("progress_message"),
+            worker_id=job_data.get("worker_id"),
+            created_at=job_data.get("created_at"),
+            started_at=job_data.get("started_at"),
+            completed_at=job_data.get("completed_at"),
+            result_data=job_data.get("result_data"),
+            error_message=job_data.get("error_message")
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting job status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/jobs/worker/status", response_model=WorkerStatusResponse)
+async def get_worker_status():
+    """
+    Get the status of the job worker.
+
+    This endpoint provides information about the scanner's job worker,
+    including whether it's running and connected to Redis.
+    """
+    logger.info("Getting worker status")
+
+    try:
+        from .job_client import job_client
+
+        is_connected = await job_client.is_connected()
+        is_running = job_client.is_running()
+
+        return WorkerStatusResponse(
+            worker_id=job_client.worker_id or "unknown",
+            is_running=is_running,
+            connected_to_redis=is_connected,
+            uptime_seconds=None,  # TODO: Track uptime
+            jobs_processed=None   # TODO: Track jobs processed
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting worker status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/jobs/queue/stats")
+async def get_queue_stats():
+    """
+    Get statistics about the job queue.
+
+    This endpoint provides information about the number of jobs
+    in different states (queued, running, completed, failed).
+    """
+    logger.info("Getting queue statistics")
+
+    try:
+        from .job_client import job_client
+
+        if not await job_client.is_connected():
+            raise HTTPException(status_code=503, detail="Job queue not available")
+
+        # Get queue stats
+        queue_name = settings.JOB_QUEUE_NAME
+
+        # Get queued jobs count
+        queued_count = await job_client.redis_client.zcard(queue_name)
+
+        # Get running jobs count
+        running_keys = await job_client.redis_client.keys(f"{queue_name}:running:*")
+        running_count = len(running_keys)
+
+        # Get completed jobs count (approximate)
+        completed_keys = await job_client.redis_client.keys(f"{queue_name}:completed:*")
+        completed_count = len(completed_keys)
+
+        # Get failed jobs count (approximate)
+        failed_keys = await job_client.redis_client.keys(f"{queue_name}:failed:*")
+        failed_count = len(failed_keys)
+
+        return {
+            "queued": queued_count,
+            "running": running_count,
+            "completed": completed_count,
+            "failed": failed_count,
+            "total": queued_count + running_count + completed_count + failed_count,
+            "worker_status": await get_worker_status()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting queue stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/jobs/worker/start")
+async def start_worker():
+    """
+    Manually start the job worker.
+
+    This endpoint can be used to restart the worker if it stops.
+    """
+    logger.info("Manually starting job worker")
+
+    try:
+        from .job_client import job_client
+        from .job_manager import job_manager
+
+        if job_client.is_running():
+            return {"message": "Worker is already running"}
+
+        # Connect to Redis
+        await job_client.connect()
+
+        # Start worker in background
+        worker_task = asyncio.create_task(
+            job_client.start_worker(job_manager.process_job)
+        )
+
+        return {"message": "Worker started successfully"}
+
+    except Exception as e:
+        logger.error(f"Error starting worker: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/jobs/worker/stop")
+async def stop_worker():
+    """
+    Manually stop the job worker.
+
+    This endpoint can be used to stop the worker for maintenance.
+    """
+    logger.info("Manually stopping job worker")
+
+    try:
+        from .job_client import job_client
+
+        if not job_client.is_running():
+            return {"message": "Worker is not running"}
+
+        await job_client.stop_worker()
+
+        return {"message": "Worker stopped successfully"}
+
+    except Exception as e:
+        logger.error(f"Error stopping worker: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 

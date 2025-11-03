@@ -26,6 +26,7 @@ from models.database import (
     Node,
     NodeMetadata
 )
+from models.jobs import Job, JobType, JobStatus, JobPriority, JobCreate, JobUpdate
 
 
 class SQLiteDatabase(DatabaseAbc):
@@ -1109,11 +1110,273 @@ class SQLiteDatabase(DatabaseAbc):
     async def update_node_metadata(self, node_id: str, metadata: Dict[str, Any]) -> bool:
         """Update node metadata."""
         conn = self._get_connection()
-        
+
         cursor = await conn.execute(
             "UPDATE nodes SET metadata = ? WHERE id = ?",
             (json.dumps(metadata), node_id)
         )
         await conn.commit()
-        
+
         return cursor.rowcount > 0
+
+    # Job management
+    def row_to_job(self, row: Row) -> Job:
+        """Convert a database row to a Job object."""
+        row_dict = dict(row)
+
+        # Parse JSON fields
+        if row_dict.get('job_data'):
+            row_dict['job_data'] = json.loads(row_dict['job_data'])
+        if row_dict.get('result_data'):
+            row_dict['result_data'] = json.loads(row_dict['result_data'])
+
+        return Job(**row_dict)
+
+    async def create_job(self, job_create: JobCreate) -> Job:
+        """Create a new job."""
+        import uuid
+        conn = self._get_connection()
+
+        job_id = str(uuid.uuid4())
+        job_data_json = json.dumps(job_create.job_data) if job_create.job_data else None
+
+        cursor = await conn.execute("""
+            INSERT INTO jobs (
+                id, job_type, status, priority, project_id, user_id,
+                source_id, investigation_id, job_data, timeout_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            job_id, job_create.job_type.value, JobStatus.PENDING.value,
+            job_create.priority.value, job_create.project_id, job_create.user_id,
+            job_create.source_id, job_create.investigation_id,
+            job_data_json, job_create.timeout_seconds
+        ))
+
+        await conn.commit()
+
+        # Retrieve created job
+        created_job = await self.get_job_by_id(job_id)
+        if not created_job:
+            raise RuntimeError("Failed to retrieve job after creation.")
+
+        return created_job
+
+    async def get_job_by_id(self, job_id: str) -> Optional[Job]:
+        """Get job by ID."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute(
+            "SELECT * FROM jobs WHERE id = ?", (job_id,)
+        )
+        row = await cursor.fetchone()
+
+        return self.row_to_job(row) if row else None
+
+    async def get_user_jobs(
+        self,
+        user_id: int,
+        status: Optional[JobStatus] = None,
+        job_type: Optional[JobType] = None,
+        project_id: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Job]:
+        """Get jobs for a user, with optional filters."""
+        conn = self._get_connection()
+
+        # Build query with filters
+        query = "SELECT * FROM jobs WHERE user_id = ?"
+        params = [user_id]
+
+        if status:
+            query += " AND status = ?"
+            params.append(status.value)
+
+        if job_type:
+            query += " AND job_type = ?"
+            params.append(job_type.value)
+
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(project_id)
+
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+
+        return [self.row_to_job(row) for row in rows]
+
+    async def get_project_jobs(
+        self,
+        project_id: int,
+        status: Optional[JobStatus] = None,
+        limit: int = 50
+    ) -> List[Job]:
+        """Get jobs for a project."""
+        conn = self._get_connection()
+
+        query = "SELECT * FROM jobs WHERE project_id = ?"
+        params = [project_id]
+
+        if status:
+            query += " AND status = ?"
+            params.append(status.value)
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+
+        return [self.row_to_job(row) for row in rows]
+
+    async def update_job(self, job_id: str, job_update: JobUpdate) -> bool:
+        """Update job status and metadata."""
+        conn = self._get_connection()
+
+        # Build dynamic update query
+        update_fields = []
+        params = []
+
+        if job_update.status:
+            update_fields.append("status = ?")
+            params.append(job_update.status.value)
+
+            # Update timestamps based on status
+            if job_update.status == JobStatus.QUEUED:
+                update_fields.append("queued_at = CURRENT_TIMESTAMP")
+            elif job_update.status == JobStatus.RUNNING:
+                update_fields.append("started_at = CURRENT_TIMESTAMP")
+            elif job_update.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+                update_fields.append("completed_at = CURRENT_TIMESTAMP")
+
+        if job_update.progress_current is not None:
+            update_fields.append("progress_current = ?")
+            params.append(job_update.progress_current)
+
+        if job_update.progress_total is not None:
+            update_fields.append("progress_total = ?")
+            params.append(job_update.progress_total)
+
+        if job_update.progress_message:
+            update_fields.append("progress_message = ?")
+            params.append(job_update.progress_message)
+
+        if job_update.result_data:
+            update_fields.append("result_data = ?")
+            params.append(json.dumps(job_update.result_data))
+
+        if job_update.error_message:
+            update_fields.append("error_message = ?")
+            params.append(job_update.error_message)
+
+        if job_update.worker_id:
+            update_fields.append("worker_id = ?")
+            params.append(job_update.worker_id)
+
+        if not update_fields:
+            return False
+
+        query = f"UPDATE jobs SET {', '.join(update_fields)} WHERE id = ?"
+        params.append(job_id)
+
+        cursor = await conn.execute(query, params)
+        await conn.commit()
+
+        return cursor.rowcount > 0
+
+    async def get_pending_jobs(self, limit: int = 10) -> List[Job]:
+        """Get pending jobs ordered by priority and creation time."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute("""
+            SELECT * FROM jobs
+            WHERE status IN (?, ?)
+            ORDER BY
+                CASE priority
+                    WHEN 'urgent' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'normal' THEN 3
+                    WHEN 'low' THEN 4
+                END,
+                created_at ASC
+            LIMIT ?
+        """, (JobStatus.PENDING.value, JobStatus.QUEUED.value, limit))
+
+        rows = await cursor.fetchall()
+        return [self.row_to_job(row) for row in rows]
+
+    async def increment_job_retry(self, job_id: str) -> bool:
+        """Increment job retry count."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute(
+            "UPDATE jobs SET retry_count = retry_count + 1 WHERE id = ?",
+            (job_id,)
+        )
+        await conn.commit()
+
+        return cursor.rowcount > 0
+
+    async def delete_job(self, job_id: str) -> bool:
+        """Delete a job."""
+        conn = self._get_connection()
+
+        cursor = await conn.execute(
+            "DELETE FROM jobs WHERE id = ?",
+            (job_id,)
+        )
+        await conn.commit()
+
+        return cursor.rowcount > 0
+
+    async def get_job_stats(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """Get job statistics, optionally filtered by user."""
+        conn = self._get_connection()
+
+        # Base query
+        base_where = "WHERE 1=1"
+        params = []
+
+        if user_id:
+            base_where += " AND user_id = ?"
+            params.append(user_id)
+
+        # Get counts by status
+        cursor = await conn.execute(f"""
+            SELECT
+                COUNT(*) as total_jobs,
+                COUNT(CASE WHEN status = ? THEN 1 END) as pending_jobs,
+                COUNT(CASE WHEN status = ? THEN 1 END) as running_jobs,
+                COUNT(CASE WHEN status = ? THEN 1 END) as completed_jobs,
+                COUNT(CASE WHEN status = ? THEN 1 END) as failed_jobs
+            FROM jobs {base_where}
+        """, params + [JobStatus.PENDING.value, JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.FAILED.value])
+
+        stats_row = await cursor.fetchone()
+
+        # Calculate success rate and average duration
+        cursor = await conn.execute(f"""
+            SELECT
+                AVG(CASE
+                    WHEN completed_at IS NOT NULL AND started_at IS NOT NULL
+                    THEN (julianday(completed_at) - julianday(started_at)) * 86400
+                    ELSE NULL
+                END) as avg_duration_seconds,
+                COUNT(CASE WHEN status = ? THEN 1 END) * 100.0 / COUNT(*) as success_rate
+            FROM jobs {base_where}
+        """, params + [JobStatus.COMPLETED.value])
+
+        duration_row = await cursor.fetchone()
+
+        return {
+            "total_jobs": stats_row['total_jobs'] if stats_row else 0,
+            "pending_jobs": stats_row['pending_jobs'] if stats_row else 0,
+            "running_jobs": stats_row['running_jobs'] if stats_row else 0,
+            "completed_jobs": stats_row['completed_jobs'] if stats_row else 0,
+            "failed_jobs": stats_row['failed_jobs'] if stats_row else 0,
+            "avg_duration_seconds": duration_row['avg_duration_seconds'] if duration_row else None,
+            "success_rate": duration_row['success_rate'] if duration_row else 0.0
+        }

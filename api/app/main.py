@@ -26,9 +26,28 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan events."""
     # Startup
     logger.info("Starting Enterprise Code Archaeologist API")
+
+    # Initialize job client
+    try:
+        from .job_client import job_client
+        await job_client.connect()
+        logger.info("Job client initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize job client: {e}")
+        # Continue without job client - job processing will be disabled
+
     yield
     # Shutdown
     logger.info("Shutting down application")
+
+    # Disconnect job client
+    try:
+        from .job_client import job_client
+        await job_client.disconnect()
+        logger.info("Job client disconnected")
+    except Exception as e:
+        logger.warning(f"Error disconnecting job client: {e}")
+
     await close_database()
 
 
@@ -374,11 +393,13 @@ async def delete_node_with_body(
 # Include all routers under the API v1 router
 from .routes.auth import router as auth_router
 from .routes.projects import router as projects_router
+from .routes.jobs import router as jobs_router
 from dependencies.database import get_database
 
 # Include all routers under the /api/v1 prefix
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(projects_router)
+api_v1_router.include_router(jobs_router)
 
 # Include the API v1 router in the main app
 app.include_router(api_v1_router)

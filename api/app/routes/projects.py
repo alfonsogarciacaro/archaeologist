@@ -19,8 +19,10 @@ from dependencies.auth import get_current_user_id
 from dependencies.database import get_database
 from db import DatabaseAbc
 from models.database import ProjectRole, Source
+from models.jobs import JobCreate, JobType, JobPriority, JobResponse
 from app.data_lake_interface import DataType
 from app.disk_data_lake import DiskDataLake
+from app.job_client import job_client
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -258,6 +260,7 @@ class FileUploadResponse(BaseModel):
     total_files: int
     processed_files: int
     skipped_files: int
+    jobs: List[JobResponse] = []  # Jobs created for processing
 
 
 async def check_project_access(
@@ -606,7 +609,7 @@ async def upload_project_sources(
     current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
-    """Upload source files to a project."""
+    """Upload source files to a project and queue them for processing."""
     # Check user access
     await check_project_access(project_id, current_user_id, db)
 
@@ -617,9 +620,10 @@ async def upload_project_sources(
         )
 
     processed_sources = []
+    created_jobs = []
     total_files = len(files)
     skipped_files = 0
-    
+
     # Parse metadata if provided
     parsed_metadata = None
     if metadata:
@@ -635,6 +639,7 @@ async def upload_project_sources(
             continue
 
         try:
+            # First, store the file in data lake and create source record
             source = await process_file_content(
                 file, project_id, current_user_id, db, parsed_metadata
             )
@@ -652,6 +657,55 @@ async def upload_project_sources(
                     created_at=source.created_at,
                     metadata=source.metadata
                 ))
+
+                # Create a job for processing this file in the scanner
+                try:
+                    job_create = JobCreate(
+                        job_type=JobType.FILE_PROCESSING,
+                        priority=JobPriority.NORMAL,
+                        project_id=project_id,
+                        user_id=current_user_id,
+                        source_id=source.id,
+                        job_data={
+                            "source_id": source.id,
+                            "filename": source.filename,
+                            "original_filename": source.original_filename,
+                            "file_type": source.file_type,
+                            "content_type": source.content_type,
+                            "data_lake_entry_id": source.data_lake_entry_id,
+                            "project_id": project_id,
+                            "user_metadata": parsed_metadata
+                        },
+                        timeout_seconds=1800  # 30 minutes per file
+                    )
+
+                    # Create job in database
+                    job = await db.create_job(job_create)
+
+                    # Enqueue job for processing
+                    try:
+                        success = await job_client.enqueue_job(job)
+                        if success:
+                            created_jobs.append(JobResponse(**job.model_dump()))
+                        else:
+                            # Mark job as failed if queueing fails
+                            await db.update_job(job.id, JobUpdate(
+                                status=JobStatus.FAILED,
+                                error_message="Failed to enqueue job for processing"
+                            ))
+                            print(f"Warning: Failed to enqueue job for file {file.filename}")
+                    except Exception as e:
+                        # Mark job as failed and continue
+                        await db.update_job(job.id, JobUpdate(
+                            status=JobStatus.FAILED,
+                            error_message=f"Queue error: {str(e)}"
+                        ))
+                        print(f"Warning: Job queue error for file {file.filename}: {e}")
+
+                except Exception as e:
+                    # Job creation failed, but file was uploaded successfully
+                    print(f"Warning: Failed to create processing job for file {file.filename}: {e}")
+
             else:
                 skipped_files += 1
 
@@ -668,13 +722,22 @@ async def upload_project_sources(
             detail="No supported files were processed. Please upload text files (.txt, .py, .js, etc.) or zip files containing text files."
         )
 
+    # Prepare response message
+    job_count = len(created_jobs)
+    message = f"Successfully uploaded {processed_files} out of {total_files} files."
+    if skipped_files > 0:
+        message += f" {skipped_files} files were skipped."
+    if job_count > 0:
+        message += f" {job_count} processing job(s) created."
+
     return FileUploadResponse(
         success=True,
-        message=f"Successfully processed {processed_files} out of {total_files} files. {skipped_files} files were skipped.",
+        message=message,
         sources=processed_sources,
         total_files=total_files,
         processed_files=processed_files,
-        skipped_files=skipped_files
+        skipped_files=skipped_files,
+        jobs=created_jobs
     )
 
 

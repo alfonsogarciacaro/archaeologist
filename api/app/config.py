@@ -58,6 +58,18 @@ class Settings:
         self.OTEL_EXPORTER_OTLP_PROTOCOL = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
         self.OTEL_RESOURCE_ATTRIBUTES = os.getenv("OTEL_RESOURCE_ATTRIBUTES", f"service.name={self.OTEL_SERVICE_NAME},service.version={self.OTEL_SERVICE_VERSION},deployment.environment={self.NODE_ENV}")
         
+        # Redis Configuration
+        self.REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        self.REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+        self.REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+        self.REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+        self.REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+
+        # Job Queue Configuration
+        self.JOB_QUEUE_NAME = os.getenv("JOB_QUEUE_NAME", "archaeologist_jobs")
+        self.JOB_RESULT_TTL = int(os.getenv("JOB_RESULT_TTL", "86400"))  # 24 hours
+        self.JOB_TIMEOUT = int(os.getenv("JOB_TIMEOUT", "3600"))  # 1 hour
+
         # Paths
         self.MOCK_ENTERPRISE_PATH = "/app/mock_enterprise"
         
