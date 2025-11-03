@@ -45,8 +45,9 @@ class ToolRegistry:
     
     def register(self, tool: Tool) -> None:
         """Register a tool"""
-        self._tools[tool.name] = tool
-        logger.info(f"Registered tool: {tool.name}")
+        tool_name = tool.name  # Call property to get actual value
+        self._tools[tool_name] = tool
+        logger.info(f"Registered tool: {tool_name}")
     
     def get_tool(self, name: str) -> Optional[Tool]:
         """Get tool by name"""
@@ -58,7 +59,35 @@ class ToolRegistry:
     
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get all tool schemas for LLM"""
-        return [tool.schema for tool in self._tools.values()]
+        schemas = []
+        for tool in self._tools.values():
+            # Call properties to get actual values
+            tool_name = tool.name
+            tool_description = tool.description
+            schema = tool.schema
+            try:
+                
+                # Test JSON serialization
+                import json
+                json.dumps(schema)
+                schemas.append(schema)
+            except Exception as e:
+                logger.error(f"Tool {tool_name} schema not JSON serializable: {e}")
+                logger.error(f"Schema: {schema}")
+                # Provide a minimal schema
+                schemas.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": tool_description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
+                    }
+                })
+        return schemas
     
     async def execute_tool(self, name: str, **kwargs) -> Dict[str, Any]:
         """Execute a tool by name"""
@@ -79,7 +108,8 @@ def get_tool_registry() -> ToolRegistry:
     """Get the global tool registry"""
     return _tool_registry
 
-def register_tool(tool: Tool) -> Tool:
-    """Decorator to register a tool"""
-    _tool_registry.register(tool)
-    return tool
+def register_tool(tool_cls: type) -> type:
+    """Decorator to register a tool class by instantiating it"""
+    instance = tool_cls()
+    _tool_registry.register(instance)
+    return tool_cls

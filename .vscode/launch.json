@@ -50,6 +50,16 @@
                 "group": "Archaeologist Services",
                 "order": 3
             }
-        }
+        },
+        {
+            "name": "Launch LLM Benchmark",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.benchmarking.run_benchmark",
+            "envFile": "${workspaceFolder}/.env.dev",
+            "args": [],
+            "cwd": "${workspaceFolder}/scanner",
+            "python": "${workspaceFolder}/scanner/.venv/bin/python"
+        },        
     ]
 }

@@ -39,7 +39,8 @@ class OpenAIProvider(LLMProvider):
         self.api_key = settings.LLM_API_KEY or "no-key-required"
         self.model = settings.LLM_MODEL or "llama2"
         self.scanner_port = settings.SCANNER_PORT
-        self.client = httpx.AsyncClient(base_url=self.api_url, timeout=60.0)
+        # Don't use base_url since we need full URL control
+        self.client = httpx.AsyncClient(timeout=60.0)
     
     async def investigate_change(self, query: str) -> Dict[str, Any]:
         """Use OpenAI-compatible API for investigation"""
@@ -59,20 +60,40 @@ class OpenAIProvider(LLMProvider):
             if self.api_key != "no-key-required":
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
+            # Debug logging
+            logger.info(f"Making request to {self.api_url}/chat/completions")
+            logger.info(f"Model: {self.model}")
+            logger.info(f"Tools count: {len(tools) if tools else 0}")
+            
+            request_payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "tools": tools,
+                "tool_choice": "auto"
+            }
+            
+            # Debug: Check if tools are serializable
+            try:
+                import json
+                json.dumps(request_payload)
+                logger.debug("Request payload is JSON serializable")
+            except Exception as e:
+                logger.error(f"Request payload not JSON serializable: {e}")
+                logger.error(f"Problematic tools: {tools}")
+                # Try without tools
+                request_payload.pop("tools", None)
+                request_payload.pop("tool_choice", None)
+
             response = await self.client.post(
-                "/chat/completions",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "tools": tools,
-                    "tool_choice": "auto"
-                },
+                f"{self.api_url}/chat/completions",
+                json=request_payload,
                 headers=headers
             )
             
+            logger.info(f"Response status: {response.status_code}")
             result = response.json()
             
             # Handle tool calls
@@ -85,7 +106,7 @@ class OpenAIProvider(LLMProvider):
                     
                     # Send results back to LLM for synthesis
                     synthesis_response = await self.client.post(
-                        "/chat/completions",
+                        f"{self.api_url}/chat/completions",
                         json={
                             "model": self.model,
                             "messages": [
@@ -122,9 +143,16 @@ class OpenAIProvider(LLMProvider):
         results = {}
         tool_registry = get_tool_registry()
         
+        import json
         for tool_call in tool_calls:
             function_name = tool_call["function"]["name"]
             arguments = tool_call["function"]["arguments"]
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except Exception as e:
+                    logger.error(f"Failed to parse tool arguments for {function_name}: {e}")
+                    arguments = {}
             
             # Execute tool using registry
             result = await tool_registry.execute_tool(function_name, **arguments)
@@ -141,6 +169,20 @@ class OpenAIProvider(LLMProvider):
         
         message = response["choices"][0]["message"]
         content = message.get("content", "")
+        
+        # Check if content contains XML-style tool calls
+        if "<tool_call>" in content:
+            logger.warning(f"LLM returned XML-style tool call in content, treating as explanation: {content}")
+            return {
+                "nodes": [],
+                "edges": [],
+                "knowledge_gaps": [],
+                "explanation": {
+                    "reasoning_steps": [f"LLM attempted to call tools but used incorrect format: {content}"],
+                    "evidence_sources": [],
+                    "confidence_score": 0.3
+                }
+            }
         
         # Try to parse as JSON
         import json
@@ -163,7 +205,7 @@ class OpenAIProvider(LLMProvider):
         """Check if OpenAI API is healthy"""
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get("/models", timeout=5.0)
+                response = await client.get(f"{self.api_url}/models", timeout=5.0)
                 return {
                     "status": "healthy" if response.status_code == 200 else "unhealthy",
                     "api_url": self.api_url,
