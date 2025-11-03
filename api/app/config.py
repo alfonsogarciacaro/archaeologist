@@ -35,14 +35,9 @@ class Settings:
         self.VECTORDB_TYPE = os.getenv("VECTORDB_TYPE", "qdrant")
         self.VECTORDB_COLLECTION_PREFIX = os.getenv("VECTORDB_COLLECTION_PREFIX", "archaeologist")
         
-        # LLM Configuration
-        self.LLM_API_URL = os.getenv("LLM_API_URL")
-        self.LLM_API_KEY = os.getenv("LLM_API_KEY")
-        self.LLM_MODEL = os.getenv("LLM_MODEL")
-        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER")
-        
-        if self.LLM_API_URL is None:
-            raise ValueError("LLM_API_URL environment variable is required")
+        # LLM Configuration - Now handled by scanner service
+        # Note: LLM functionality has been moved to scanner service
+        # API service now calls scanner's /investigate endpoint
         
         # Database Configuration
         self.database_url = os.getenv("DATABASE_URL", "sqlite:///archaeologist.db")

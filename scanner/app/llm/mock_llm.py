@@ -1,5 +1,5 @@
 """
-Mock LLM Service for Prototype Development
+Mock LLM Service for Scanner Service
 
 This module provides a rule-based mock LLM service for the prototype.
 It simulates LLM responses without requiring actual LLM API calls,
@@ -9,7 +9,7 @@ making it perfect for fast development and demonstration.
 import logging
 from typing import Dict, Any, List
 import httpx
-from .config import get_settings
+from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,9 @@ class MockLLMService:
     """
     
     def __init__(self):
-        self.scanner_url = get_settings().SCANNER_URL or "http://scanner:8000"
-        self.client = httpx.AsyncClient(base_url=self.scanner_url, timeout=30.0)
+        settings = get_settings()
+        self.scanner_port = settings.SCANNER_PORT
+        self.client = httpx.AsyncClient(base_url=f"http://localhost:{self.scanner_port}", timeout=30.0)
     
     async def investigate_change(self, query: str) -> Dict[str, Any]:
         """

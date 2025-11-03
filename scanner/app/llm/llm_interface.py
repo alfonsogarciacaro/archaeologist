@@ -1,5 +1,5 @@
 """
-LLM Interface for Enterprise Code Archaeologist
+LLM Interface for Scanner Service
 
 This module provides a flexible interface for LLM services that can work with:
 - Local models (llamacpp, Ollama)
@@ -11,7 +11,9 @@ import logging
 from typing import Dict, Any, List, Optional
 from abc import ABC, abstractmethod
 import httpx
-from .config import get_settings
+from ..config import get_settings
+from ..prompts.investigation.system_prompts import InvestigationPrompts
+from ..tools.registry import get_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -32,96 +34,23 @@ class OpenAIProvider(LLMProvider):
     """OpenAI-compatible API provider"""
     
     def __init__(self):
-        self.api_url = get_settings().LLM_API_URL or "http://localhost:11434/v1"
-        self.api_key = get_settings().LLM_API_KEY or "no-key-required"
-        self.model = get_settings().LLM_MODEL or "llama2"
+        settings = get_settings()
+        self.api_url = settings.LLM_API_URL or "http://localhost:11434/v1"
+        self.api_key = settings.LLM_API_KEY or "no-key-required"
+        self.model = settings.LLM_MODEL or "llama2"
+        self.scanner_port = settings.SCANNER_PORT
         self.client = httpx.AsyncClient(base_url=self.api_url, timeout=60.0)
     
     async def investigate_change(self, query: str) -> Dict[str, Any]:
         """Use OpenAI-compatible API for investigation"""
         
-        # Define tools available to LLM
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "literal_search",
-                    "description": "Search for exact string matches in code",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Exact string to search for"
-                            },
-                            "paths": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "Paths to search in"
-                            }
-                        },
-                        "required": ["query"]
-                    }
-                }
-            },
-            {
-                "type": "function", 
-                "function": {
-                    "name": "dependency_analysis",
-                    "description": "Analyze dependencies between files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "paths": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "Paths to analyze"
-                            }
-                        },
-                        "required": ["paths"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "semantic_search",
-                    "description": "Search for semantically related code",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "concept": {
-                                "type": "string",
-                                "description": "Concept to search for"
-                            },
-                            "limit": {
-                                "type": "integer",
-                                "description": "Maximum results to return"
-                            }
-                        },
-                        "required": ["concept"]
-                    }
-                }
-            }
-        ]
+        # Get tools from registry
+        tool_registry = get_tool_registry()
+        tools = tool_registry.get_tool_schemas()
         
-        # System prompt
-        system_prompt = """You are an expert software architect investigating code changes in enterprise systems.
-
-Your task is to analyze the impact of proposed changes by:
-1. Finding exact matches using literal_search
-2. Analyzing dependencies using dependency_analysis  
-3. Discovering related code using semantic_search
-4. Synthesizing findings into a comprehensive impact report
-
-You must:
-- Use the provided tools to gather evidence
-- Be thorough in your analysis
-- Identify potential knowledge gaps
-- Provide clear reasoning for your conclusions
-- Include confidence scores for your findings
-
-Focus on understanding how changes propagate through the system and what might break."""
+        # Get system prompt
+        system_prompt = InvestigationPrompts.SYSTEM_PROMPT
+        user_prompt = InvestigationPrompts.get_user_prompt(query)
         
         try:
             headers={
@@ -136,7 +65,7 @@ Focus on understanding how changes propagate through the system and what might b
                     "model": self.model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Investigate this change: {query}"}
+                        {"role": "user", "content": user_prompt}
                     ],
                     "tools": tools,
                     "tool_choice": "auto"
@@ -191,60 +120,19 @@ Focus on understanding how changes propagate through the system and what might b
     async def _execute_tool_calls(self, tool_calls: List[Dict]) -> Dict[str, Any]:
         """Execute tool calls and return results"""
         results = {}
+        tool_registry = get_tool_registry()
         
         for tool_call in tool_calls:
             function_name = tool_call["function"]["name"]
             arguments = tool_call["function"]["arguments"]
             
-            if function_name == "literal_search":
-                results = await self._literal_search(arguments.get("query"), arguments.get("paths", []))
-                results["literal_search"] = results
-            elif function_name == "dependency_analysis":
-                results["dependency_analysis"] = await self._dependency_analysis(arguments.get("paths", []))
-            elif function_name == "semantic_search":
-                results["semantic_search"] = await self._semantic_search(arguments.get("concept"), arguments.get("limit", 10))
+            # Execute tool using registry
+            result = await tool_registry.execute_tool(function_name, **arguments)
+            results[function_name] = result
         
         return results
     
-    async def _literal_search(self, query: str, paths: List[str]) -> Dict[str, Any]:
-        """Execute literal search using scanner service"""
-        try:
-            scanner_url = get_settings().SCANNER_URL or "http://scanner:8000"
-            async with httpx.AsyncClient() as client:
-                response = await client.post("/scan", json={
-                    "query": query,
-                    "paths": paths
-                })
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error in literal search: {e}")
-            return {"error": str(e), "results": []}
-    
-    async def _dependency_analysis(self, paths: List[str]) -> Dict[str, Any]:
-        """Execute dependency analysis using scanner service"""
-        try:
-            scanner_url = get_settings().SCANNER_URL or "http://scanner:8000"
-            async with httpx.AsyncClient() as client:
-                response = await client.post("/analyze-dependencies", json={
-                    "paths": paths
-                })
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error in dependency analysis: {e}")
-            return {"error": str(e), "dependencies": []}
-    
-    async def _semantic_search(self, concept: str, limit: int) -> Dict[str, Any]:
-        """Execute semantic search (placeholder for now)"""
-        # For prototype, return mock semantic results
-        return {
-            "results": [
-                {
-                    "file": f"mock_file_related_to_{concept}.py",
-                    "relevance": 0.8,
-                    "explanation": f"Semantically related to {concept}"
-                }
-            ]
-        }
+
     
     def _parse_llm_response(self, response: Dict) -> Dict[str, Any]:
         """Parse LLM response into our format"""
@@ -292,13 +180,13 @@ class MockLLMProvider(LLMProvider):
     """Mock LLM provider for testing"""
     
     def __init__(self):
-        from .mock_llm import get_mock_llm_service
         self.mock_service = None
     
     async def _get_service(self):
         if self.mock_service is None:
-            from .mock_llm import get_mock_llm_service
-            self.mock_service = await get_mock_llm_service()
+            # Import here to avoid circular imports
+            from .mock_llm import MockLLMService
+            self.mock_service = MockLLMService()
         return self.mock_service
     
     async def investigate_change(self, query: str) -> Dict[str, Any]:
@@ -320,7 +208,8 @@ class LLMFactory:
     @staticmethod
     async def create_provider() -> LLMProvider:
         """Create LLM provider based on configuration"""
-        provider_type = get_settings().LLM_PROVIDER or "mock"
+        settings = get_settings()
+        provider_type = settings.LLM_PROVIDER or "mock"
         
         if provider_type.lower() == "mock":
             return MockLLMProvider()

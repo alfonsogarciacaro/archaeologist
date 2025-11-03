@@ -8,7 +8,6 @@ import os
 import sys
 import logging
 from .config import get_settings
-from .llm_interface import get_llm_provider
 from dependencies import get_database, close_database
 
 # Import telemetry and middleware from shared package
@@ -127,16 +126,25 @@ async def investigate_change(
     """
     Investigate the impact of a proposed change across the enterprise system.
     
-    This endpoint uses the LLM provider to analyze the change and identify
-    potentially affected components, dependencies, and knowledge gaps.
+    This endpoint now calls the scanner service which handles LLM analysis
+    to identify potentially affected components, dependencies, and knowledge gaps.
     """
     # Note: Automatic HTTP tracing is handled by middleware
     # Business logic tracing can be added here if needed
     
     try:
-        # Get the LLM provider and investigate the change
-        llm_provider = await get_llm_provider()
-        investigation_result = await llm_provider.investigate_change(request.query)
+        # Call scanner service for LLM investigation
+        import httpx
+        scanner_url = settings.SCANNER_URL
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{scanner_url}/investigate",
+                json={"query": request.query},
+                timeout=60.0
+            )
+            response.raise_for_status()
+            investigation_result = response.json()
         
         # Convert the LLM response to our ImpactReport format
         nodes = []
@@ -222,40 +230,34 @@ async def investigation_status():
     except Exception as e:
         scanner_status = f"unavailable: {str(e)}"
     
-    # Check LLM provider status
+    # Check LLM status via scanner service
     try:
-        llm_provider = await get_llm_provider()
-        llm_status = await llm_provider.health_check()
-        llm_provider_type = settings.LLM_PROVIDER or "unknown"
+        import httpx
+        async with httpx.AsyncClient() as client:
+            llm_response = await client.get(f"{settings.SCANNER_URL}/llm-health", timeout=5.0)
+            llm_status = llm_response.json()
     except Exception as e:
         llm_status = {"status": f"unavailable: {str(e)}"}
-        llm_provider_type = settings.LLM_PROVIDER or "unknown"
     
-    # Determine capabilities based on provider
+    # Determine capabilities based on scanner LLM
     capabilities = [
         "literal_search",
-        "dependency_analysis",
-        "knowledge_gap_detection"
+        "dependency_analysis", 
+        "knowledge_gap_detection",
+        "llm_investigation"
     ]
     
-    if llm_provider_type == "ollama":
-        capabilities.append("ollama_reasoning")
-        capabilities.append("tool_calling")
-    elif llm_provider_type == "mock":
+    if llm_status.get("provider") == "mock":
         capabilities.append("mock_llm_reasoning")
     else:
         capabilities.append("llm_reasoning")
+        capabilities.append("tool_calling")
     
     return {
         "status": "healthy",
         "components": {
             "api": "healthy",
-            "llm": {
-                "provider": llm_provider_type,
-                "status": llm_status.get("status", "unknown"),
-                "model": settings.LLM_MODEL or "unknown",
-                "api_url": settings.LLM_API_URL or "unknown"
-            },
+            "llm": llm_status,
             "scanner": scanner_status
         },
         "capabilities": capabilities

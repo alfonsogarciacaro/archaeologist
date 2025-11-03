@@ -47,6 +47,12 @@ class Settings:
         self.VECTORDB_PORT = int(os.getenv("VECTORDB_PORT", "6333"))
         self.VECTORDB_TYPE = os.getenv("VECTORDB_TYPE", "qdrant")
         self.VECTORDB_COLLECTION_PREFIX = os.getenv("VECTORDB_COLLECTION_PREFIX", "archaeologist")
+        
+        # LLM Configuration
+        self.LLM_API_URL = os.getenv("LLM_API_URL")
+        self.LLM_API_KEY = os.getenv("LLM_API_KEY")
+        self.LLM_MODEL = os.getenv("LLM_MODEL", "llama2")
+        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
 
 @lru_cache()
 def get_settings():

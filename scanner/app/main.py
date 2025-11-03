@@ -11,14 +11,17 @@ from pathlib import Path
 from .config import get_settings
 
 # Import RAG components
-from rag.rag_service import get_rag_service
-from rag.models import (
+from .rag.rag_service import get_rag_service
+from .rag.models import (
     IngestRequest,
     IngestResponse,
     SearchRequest,
     SearchResponse,
     HealthCheckResponse
 )
+
+# Import LLM components
+from .llm.llm_interface import get_llm_provider
 
 # Import telemetry and middleware from shared package
 # from telemetry import initialize_telemetry, get_tracer
@@ -646,4 +649,87 @@ async def test_search():
 
     return await search_documents(test_request)
 
+
+# LLM Investigation Models
+
+class InvestigationRequest(BaseModel):
+    query: str
+    use_mock: Optional[bool] = False
+
+class InvestigationResponse(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    knowledge_gaps: List[Dict[str, Any]]
+    explanation: Dict[str, Any]
+    recommendations: Optional[List[str]] = None
+
+class LLMHealthResponse(BaseModel):
+    status: str
+    provider: Optional[str] = None
+    api_url: Optional[str] = None
+    model: Optional[str] = None
+    note: Optional[str] = None
+
+
+# LLM Endpoints
+
+@app.post("/investigate", response_model=InvestigationResponse)
+async def investigate_change(request: InvestigationRequest):
+    """
+    Investigate a proposed change using LLM analysis.
+    
+    This endpoint uses LLM to analyze the impact of changes by:
+    - Finding exact matches using literal search
+    - Analyzing dependencies between files
+    - Discovering semantically related code
+    - Synthesizing findings into comprehensive impact report
+    """
+    logger.info(f"Received investigation request: '{request.query}'")
+    
+    try:
+        # Get LLM provider
+        llm_provider = await get_llm_provider()
+        
+        # Perform investigation
+        result = await llm_provider.investigate_change(request.query)
+        
+        logger.info(f"Investigation completed for query: '{request.query}'")
+        return InvestigationResponse(**result)
+        
+    except Exception as e:
+        logger.error(f"Error during investigation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/llm-health", response_model=LLMHealthResponse)
+async def llm_health_check():
+    """
+    Perform health check on LLM service.
+    
+    Returns the status of:
+    - LLM provider (mock, OpenAI, etc.)
+    - API connectivity (for external providers)
+    - Model availability
+    """
+    logger.info("Performing LLM health check")
+    
+    try:
+        llm_provider = await get_llm_provider()
+        health_result = await llm_provider.health_check()
+        
+        logger.info(f"LLM health check completed: {health_result.get('status', 'unknown')}")
+        return LLMHealthResponse(**health_result)
+        
+    except Exception as e:
+        logger.error(f"Error during LLM health check: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/test-investigate")
+async def test_investigate():
+    """Test endpoint for LLM investigation"""
+    test_request = InvestigationRequest(
+        query="What happens if we change term_sheet_id from string to UUID?",
+        use_mock=True
+    )
+    
+    return await investigate_change(test_request)
 
