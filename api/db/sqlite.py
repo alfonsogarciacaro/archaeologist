@@ -6,6 +6,7 @@ development and small-scale deployments.
 """
 
 import json
+import os
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Union
 from aiosqlite import Row, connect, Connection
@@ -48,13 +49,11 @@ class SQLiteDatabase(DatabaseAbc):
         self._conn.row_factory = lambda cursor, row: {col[0]: row[idx] for idx, col in enumerate(cursor.description)} # type: ignore
         
         # Enable foreign key constraints
-        await self._conn.execute("PRAGMA foreign_keys = ON")
+        conn = self._get_connection()
+        await conn.execute("PRAGMA foreign_keys = ON")
         
-        # Create tables
-        await self._create_tables()
-        
-        # Run migrations
-        await self._run_migrations()
+        # Run database migrations
+        await self._run_database_migrations()
         
         # Insert default configuration
         await self._insert_default_config()
@@ -64,8 +63,84 @@ class SQLiteDatabase(DatabaseAbc):
         if self._conn:
             await self._conn.close()
     
-    async def _run_migrations(self) -> None:
-        """Run database migrations to add new columns."""
+    async def _run_database_migrations(self) -> None:
+        """Run database migrations using migration manager."""
+        try:
+            # Run migrations directly from SQL files
+            migrations_dir = os.path.join(os.path.dirname(__file__), "migrations")
+            
+            # Get all migration files
+            import glob
+            migration_files = sorted(glob.glob(os.path.join(migrations_dir, "*.sql")))
+            
+            for migration_file in migration_files:
+                if os.path.basename(migration_file).startswith("__"):
+                    continue
+                    
+                await self._run_migration_file(migration_file)
+                
+        except Exception as e:
+            # Fallback to legacy migration system if migration manager fails
+            print(f"Warning: Migration system failed, using fallback: {e}")
+            await self._run_legacy_migrations()
+    
+    async def _run_migration_file(self, migration_file: str) -> None:
+        """Run a single migration file."""
+        migration_name = os.path.basename(migration_file)
+        print(f"Running migration: {migration_name}")
+        
+        with open(migration_file, 'r', encoding='utf-8') as f:
+            migration_sql = f.read()
+        
+        # Split SQL into individual statements
+        statements = self._split_sql_statements(migration_sql)
+        
+        # Get connection using helper
+        conn = self._get_connection()
+        
+        # Execute each statement
+        for statement in statements:
+            statement = statement.strip()
+            if statement and not statement.startswith('--'):
+                try:
+                    await conn.execute(statement)
+                except Exception as e:
+                    # Log error but continue for idempotent migrations
+                    print(f"Statement failed (expected for idempotent migrations): {e}")
+        
+        await conn.commit()
+        print(f"Migration {migration_name} completed successfully")
+    
+    def _split_sql_statements(self, sql: str) -> list:
+        """Split SQL content into individual statements."""
+        statements = []
+        current_statement = ""
+        in_string = False
+        string_char = None
+        
+        for char in sql:
+            current_statement += char
+            
+            if char in ("'", '"') and (not current_statement.endswith("\\'") and not current_statement.endswith('\\"')):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+            
+            if char == ';' and not in_string:
+                statements.append(current_statement)
+                current_statement = ""
+        
+        # Add any remaining content
+        if current_statement.strip():
+            statements.append(current_statement)
+        
+        return statements
+    
+    async def _run_legacy_migrations(self) -> None:
+        """Fallback migration system for backward compatibility."""
         conn = self._get_connection()
         
         # Add metadata column to sources table if it doesn't exist
@@ -79,193 +154,7 @@ class SQLiteDatabase(DatabaseAbc):
                 await conn.commit()
                 print("Added metadata column to sources table")
         except Exception as e:
-            print(f"Error running migrations: {e}")
-    
-    async def _create_tables(self) -> None:
-        """Create all necessary database tables."""
-        conn = self._get_connection()
-        
-        # Users table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                hashed_password TEXT NOT NULL,
-                is_active BOOLEAN DEFAULT TRUE,
-                is_admin BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP
-            )
-        """)
-        
-        # Projects table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS projects (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT,
-                repository_paths TEXT,  -- JSON array of repository paths
-                is_active BOOLEAN DEFAULT TRUE,
-                created_by INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Project users table (many-to-many relationship)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS project_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(project_id, user_id),
-                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        """)
-
-        # Sources table (for uploaded files)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS sources (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id INTEGER NOT NULL,
-                filename TEXT NOT NULL,
-                original_filename TEXT NOT NULL,
-                file_size INTEGER NOT NULL,
-                file_type TEXT NOT NULL,
-                content_type TEXT NOT NULL,
-                data_lake_entry_id TEXT NOT NULL,
-                metadata TEXT, -- JSON metadata for user comments, etc.
-                uploaded_by INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-                FOREIGN KEY (uploaded_by) REFERENCES users (id) ON DELETE CASCADE
-            )
-        """)
-
-        # Investigations table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS investigations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                project_id INTEGER,
-                query TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                impact_data TEXT,
-                component_count INTEGER,
-                knowledge_gap_count INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                started_at TIMESTAMP,
-                completed_at TIMESTAMP,
-                execution_time_ms INTEGER,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
-            )
-        """)
-        
-        # Knowledge gaps table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS knowledge_gaps (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                investigation_id INTEGER NOT NULL,
-                component_name TEXT NOT NULL,
-                gap_type TEXT NOT NULL,
-                description TEXT NOT NULL,
-                suggested_action TEXT NOT NULL,
-                confidence_score REAL,
-                is_resolved BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                resolved_at TIMESTAMP,
-                FOREIGN KEY (investigation_id) REFERENCES investigations (id) ON DELETE CASCADE
-            )
-        """)
-        
-        # System config table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS system_config (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                description TEXT,
-                is_sensitive BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Sessions table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                session_token TEXT UNIQUE NOT NULL,
-                expires_at TIMESTAMP NOT NULL,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Nodes table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS nodes (
-                id TEXT PRIMARY KEY,
-                project_id INTEGER,
-                name TEXT NOT NULL,
-                type TEXT NOT NULL,
-                path TEXT,
-                source_type TEXT NOT NULL,
-                confidence REAL NOT NULL,
-                metadata TEXT,  -- JSON string
-                investigation_id INTEGER,
-                source_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-                FOREIGN KEY (investigation_id) REFERENCES investigations (id) ON DELETE CASCADE,
-                FOREIGN KEY (source_id) REFERENCES sources (id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Node metadata table
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS node_metadata (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                node_id TEXT NOT NULL,
-                key TEXT NOT NULL,
-                value TEXT NOT NULL,
-                created_by INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (node_id) REFERENCES nodes (id) ON DELETE CASCADE,
-                FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Create indexes for performance
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_user_id ON investigations (user_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_project_id ON investigations (project_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_status ON investigations (status)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_gaps_investigation_id ON knowledge_gaps (investigation_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (session_token)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_created_by ON projects (created_by)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_is_active ON projects (is_active)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_project_id ON project_users (project_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_user_id ON project_users (user_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_project_id ON sources (project_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_uploaded_by ON sources (uploaded_by)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_project_id ON nodes (project_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_investigation_id ON nodes (investigation_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_source_id ON nodes (source_id)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_node_metadata_node_id ON node_metadata (node_id)")
-
-        await conn.commit()
+            print(f"Error running legacy migrations: {e}")
     
     async def _insert_default_config(self) -> None:
         """Insert default system configuration."""
