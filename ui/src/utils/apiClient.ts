@@ -332,24 +332,40 @@ class ApiClient {
   }
 
   async updateNodeMetadata(nodeId: string, metadata: any, projectId?: string) {
-    const url = projectId
-      ? `/nodes/${encodeURIComponent(nodeId)}/metadata?project_id=${encodeURIComponent(projectId)}`
-      : `/nodes/${encodeURIComponent(nodeId)}/metadata`;
+    // Check if this is a source node
+    if (nodeId.startsWith('source-') && projectId) {
+      const sourceId = parseInt(nodeId.replace('source-', ''));
+      const response = await this.request(`/projects/${projectId}/sources/${sourceId}/metadata`, {
+        method: 'PUT',
+        body: JSON.stringify(metadata),
+      });
 
-    const response = await this.request(url, {
-      method: 'PUT',
-      body: JSON.stringify({
-        node_id: nodeId,
-        metadata: metadata,
-        project_id: projectId,
-      }),
-    });
+      if (!response.ok) {
+        throw new Error('Failed to update source metadata');
+      }
 
-    if (!response.ok) {
-      throw new Error('Failed to update node metadata');
+      return response.json();
+    } else {
+      // Regular node metadata update
+      const url = projectId
+        ? `/nodes/${encodeURIComponent(nodeId)}/metadata?project_id=${encodeURIComponent(projectId)}`
+        : `/nodes/${encodeURIComponent(nodeId)}/metadata`;
+
+      const response = await this.request(url, {
+        method: 'PUT',
+        body: JSON.stringify({
+          node_id: nodeId,
+          metadata: metadata,
+          project_id: projectId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update node metadata');
+      }
+
+      return response.json();
     }
-
-    return response.json();
   }
 
   // Public methods for AuthContext

@@ -6,6 +6,7 @@ export interface DependencyNode {
   source_type: string;
   confidence: number;
   last_updated?: string;
+  metadata?: { comment?: string };
 }
 
 export interface DependencyEdge {

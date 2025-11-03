@@ -136,7 +136,8 @@ class DatabaseAbc(abc.ABC):
         file_type: str,
         content_type: str,
         data_lake_entry_id: str,
-        uploaded_by: int
+        uploaded_by: int,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Source:
         """Create a new source record."""
         pass

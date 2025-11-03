@@ -115,7 +115,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
     const allNodes = [...investigationNodes];
     sourceNodes.forEach((sourceNode) => {
       const existingNode = investigationNodes.find(node =>
-        node.name === sourceNode.name || node.id === sourceNode.id
+        node.id === sourceNode.id
       );
       if (!existingNode) {
         allNodes.push(sourceNode);
@@ -363,9 +363,8 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
 
     console.log('Setting metadata dialog to visible:', true, 'nodeData:', nodeData);
     
-    // Extract existing metadata comments
-    const existingComments = nodeData?.metadata?.comments || '';
-    setEditingMetadata(existingComments);
+    const existingComment = nodeData?.metadata?.comment || '';
+    setEditingMetadata(existingComment);
     setHasUnsavedChanges(false);
     
     // Close context menu first, then show dialog
@@ -389,7 +388,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
 
   // Update metadata
   const updateMetadata = useCallback((nodeId: string) => {
-    const metadata = { comments: editingMetadata };
+    const metadata = { comment: editingMetadata };
     console.log('Updating metadata for node:', nodeId, 'with:', metadata);
     
     if (onNodeMetadataUpdate) {
@@ -595,7 +594,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
                       className="submit-btn"
                       disabled={!hasUnsavedChanges}
                       onClick={() => {
-                        updateMetadata(metadataDialog.nodeId);
+                        metadataDialog.nodeId && updateMetadata(metadataDialog.nodeId);
                       }}
                       style={{
                         opacity: hasUnsavedChanges ? 1 : 0.6,

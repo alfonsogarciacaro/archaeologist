@@ -8,7 +8,7 @@ development and small-scale deployments.
 import json
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Union
-from aiosqlite import connect, Connection
+from aiosqlite import Row, connect, Connection
 
 from .base import DatabaseAbc
 from models.database import (
@@ -53,6 +53,9 @@ class SQLiteDatabase(DatabaseAbc):
         # Create tables
         await self._create_tables()
         
+        # Run migrations
+        await self._run_migrations()
+        
         # Insert default configuration
         await self._insert_default_config()
     
@@ -60,6 +63,23 @@ class SQLiteDatabase(DatabaseAbc):
         """Close database connection."""
         if self._conn:
             await self._conn.close()
+    
+    async def _run_migrations(self) -> None:
+        """Run database migrations to add new columns."""
+        conn = self._get_connection()
+        
+        # Add metadata column to sources table if it doesn't exist
+        try:
+            cursor = await conn.execute("PRAGMA table_info(sources)")
+            columns = await cursor.fetchall()
+            column_names = [col['name'] for col in columns]
+            
+            if 'metadata' not in column_names:
+                await conn.execute("ALTER TABLE sources ADD COLUMN metadata TEXT")
+                await conn.commit()
+                print("Added metadata column to sources table")
+        except Exception as e:
+            print(f"Error running migrations: {e}")
     
     async def _create_tables(self) -> None:
         """Create all necessary database tables."""
@@ -120,6 +140,7 @@ class SQLiteDatabase(DatabaseAbc):
                 file_type TEXT NOT NULL,
                 content_type TEXT NOT NULL,
                 data_lake_entry_id TEXT NOT NULL,
+                metadata TEXT, -- JSON metadata for user comments, etc.
                 uploaded_by INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
@@ -1010,6 +1031,13 @@ class SQLiteDatabase(DatabaseAbc):
             most_quied_components=None  # TODO: Implement component frequency analysis
         ).model_dump()
 
+    def row_to_source(self, row: Row) -> Source:
+        """Convert a database row to a Source object."""
+        row_dict = dict(row)
+        if row_dict.get('metadata'):
+            row_dict['metadata'] = json.loads(row_dict['metadata'])
+        return Source(**row_dict)        
+
     # Source management
     async def create_source(
         self,
@@ -1020,7 +1048,8 @@ class SQLiteDatabase(DatabaseAbc):
         file_type: str,
         content_type: str,
         data_lake_entry_id: str,
-        uploaded_by: int
+        uploaded_by: int,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Source:
         """Create a new source record."""
         conn = self._get_connection()
@@ -1028,24 +1057,27 @@ class SQLiteDatabase(DatabaseAbc):
         cursor = await conn.execute("""
             INSERT INTO sources (
                 project_id, filename, original_filename, file_size,
-                file_type, content_type, data_lake_entry_id, uploaded_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                file_type, content_type, data_lake_entry_id, metadata, uploaded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             project_id, filename, original_filename, file_size,
-            file_type, content_type, data_lake_entry_id, uploaded_by
+            file_type, content_type, data_lake_entry_id, 
+            json.dumps(metadata) if metadata else None,
+            uploaded_by
         ))
 
         source_id = cursor.lastrowid
         await conn.commit()
-
-        # Retrieve the created source
+        
+        # Retrieve created source
         cursor = await conn.execute(
             "SELECT * FROM sources WHERE id = ?", (source_id,)
         )
         row = await cursor.fetchone()
         if not row:
             raise RuntimeError("Failed to retrieve source after creation.")
-        return Source(**row)
+
+        return self.row_to_source(row)
 
     async def get_project_sources(self, project_id: int) -> List[Source]:
         """Get all sources for a project."""
@@ -1056,8 +1088,10 @@ class SQLiteDatabase(DatabaseAbc):
             (project_id,)
         )
         rows = await cursor.fetchall()
-
-        return [Source(**row) for row in rows]
+        
+        sources = [self.row_to_source(row) for row in rows]
+        
+        return sources
 
     async def get_source_by_id(self, source_id: int) -> Optional[Source]:
         """Get source by ID."""
@@ -1068,19 +1102,20 @@ class SQLiteDatabase(DatabaseAbc):
         )
         row = await cursor.fetchone()
 
-        return Source(**row) if row else None
+        return self.row_to_source(row) if row else None
 
     async def delete_source(self, source_id: int) -> bool:
-        """Delete a source record."""
+        """Delete a source."""
         conn = self._get_connection()
-
+        
         cursor = await conn.execute(
             "DELETE FROM sources WHERE id = ?", (source_id,)
         )
         await conn.commit()
+        
+        deleted_count = cursor.rowcount
+        return deleted_count > 0
 
-        return cursor.rowcount > 0
-    
     async def update_source_metadata(self, source_id: int, metadata: Dict[str, Any]) -> bool:
         """Update source metadata."""
         conn = self._get_connection()
@@ -1098,7 +1133,7 @@ class SQLiteDatabase(DatabaseAbc):
         """Create a new node."""
         conn = self._get_connection()
         
-        cursor = await conn.execute("""
+        await conn.execute("""
             INSERT INTO nodes (id, project_id, name, type, path, source_type, confidence, metadata, investigation_id, source_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (

@@ -5,13 +5,14 @@ This module provides endpoints for creating, managing, and accessing projects
 and their user permissions.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Form
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 import zipfile
 import io
+import json
 from pathlib import Path
 
 from dependencies.auth import get_current_user_id
@@ -52,7 +53,8 @@ async def process_file_content(
     file: UploadFile,
     project_id: int,
     current_user_id: int,
-    db: DatabaseAbc
+    db: DatabaseAbc,
+    user_metadata: Optional[Dict[str, Any]] = None
 ) -> Optional[Source]:
     """Process a single uploaded file and store it in the data lake."""
     try:
@@ -174,7 +176,8 @@ async def process_file_content(
             file_type=file.content_type or "application/octet-stream",
             content_type=content_type,
             data_lake_entry_id=data_lake_entry.id,
-            uploaded_by=current_user_id
+            uploaded_by=current_user_id,
+            metadata=user_metadata  # Only store user-provided metadata in DB
         )
 
         return source
@@ -244,6 +247,7 @@ class SourceResponse(BaseModel):
     content_type: str
     uploaded_by: int
     created_at: Optional[datetime] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class FileUploadResponse(BaseModel):
@@ -598,6 +602,7 @@ async def remove_user_from_project(
 async def upload_project_sources(
     project_id: int,
     files: List[UploadFile] = File(...),
+    metadata: Optional[str] = Form(None),
     current_user_id: int = Depends(get_current_user_id),
     db: DatabaseAbc = Depends(get_database)
 ):
@@ -614,6 +619,15 @@ async def upload_project_sources(
     processed_sources = []
     total_files = len(files)
     skipped_files = 0
+    
+    # Parse metadata if provided
+    parsed_metadata = None
+    if metadata:
+        try:
+            parsed_metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            # If metadata is not valid JSON, treat as a simple comment
+            parsed_metadata = {"comment": metadata}
 
     for file in files:
         if not file.filename:
@@ -622,7 +636,7 @@ async def upload_project_sources(
 
         try:
             source = await process_file_content(
-                file, project_id, current_user_id, db
+                file, project_id, current_user_id, db, parsed_metadata
             )
 
             if source:
@@ -635,7 +649,8 @@ async def upload_project_sources(
                     file_type=source.file_type,
                     content_type=source.content_type,
                     uploaded_by=source.uploaded_by,
-                    created_at=source.created_at
+                    created_at=source.created_at,
+                    metadata=source.metadata
                 ))
             else:
                 skipped_files += 1
@@ -685,7 +700,8 @@ async def get_project_sources(
             file_type=source.file_type,
             content_type=source.content_type,
             uploaded_by=source.uploaded_by,
-            created_at=source.created_at
+            created_at=source.created_at,
+            metadata=source.metadata
         )
         for source in sources
     ]
@@ -723,3 +739,38 @@ async def delete_project_source(
         )
 
     return {"message": "Source deleted successfully"}
+
+
+@router.put("/{project_id}/sources/{source_id}/metadata")
+async def update_source_metadata(
+    project_id: int,
+    source_id: int,
+    metadata: Dict[str, Any],
+    current_user_id: int = Depends(get_current_user_id),
+    db: DatabaseAbc = Depends(get_database)
+):
+    """Update metadata for a source."""
+    # Check user has admin or owner role
+    await check_project_access(
+        project_id, current_user_id, db,
+        [ProjectRole.OWNER, ProjectRole.ADMIN]
+    )
+
+    # Get source to verify it belongs to the project
+    source = await db.get_source_by_id(source_id)
+    if not source or source.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Source not found in this project"
+        )
+
+    # Update source metadata
+    success = await db.update_source_metadata(source_id, metadata)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update source metadata"
+        )
+
+    return {"message": "Source metadata updated successfully", "metadata": metadata}
