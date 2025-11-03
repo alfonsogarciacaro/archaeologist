@@ -9,7 +9,7 @@ from typing import Optional
 import logging
 from .vector_db import VectorDatabaseInterface
 from .qdrant_adapter import QdrantAdapter
-from ..config import get_settings
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 

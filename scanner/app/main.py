@@ -10,6 +10,16 @@ import logging
 from pathlib import Path
 from .config import get_settings
 
+# Import RAG components
+from rag.rag_service import get_rag_service
+from rag.models import (
+    IngestRequest,
+    IngestResponse,
+    SearchRequest,
+    SearchResponse,
+    HealthCheckResponse
+)
+
 # Import telemetry and middleware from shared package
 # from telemetry import initialize_telemetry, get_tracer
 # from middleware import TracingMiddleware
@@ -87,6 +97,7 @@ class ImpactAnalysisResponse(BaseModel):
     edges: List[ComponentEdge]
     knowledge_gaps: List[Dict[str, Any]]
     explanation: Dict[str, Any]
+
 
 @app.get("/")
 async def root():
@@ -471,3 +482,168 @@ async def test_impact_analysis():
         paths=["/app/mock_enterprise"]
     )
     return await impact_analysis_endpoint(test_request)
+
+
+# RAG Endpoints
+
+@app.post("/ingest", response_model=IngestResponse)
+async def ingest_document(request: IngestRequest):
+    """
+    Ingest a document into the RAG system.
+    
+    This endpoint processes a document by:
+    1. Preprocessing the text content
+    2. Creating overlapping chunks optimized for embeddings
+    3. Generating embeddings using local GGUF models
+    4. Storing chunks with embeddings in vector database
+    
+    The collection name follows the pattern: {VECTORDB_COLLECTION_PREFIX}_{project}_{normalized_file_name}
+    """
+    logger.info(f"Received ingestion request for file: {request.file_name}")
+    
+    try:
+        rag_service = await get_rag_service()
+        result = await rag_service.ingest_document(request)
+        
+        logger.info(f"Successfully ingested {result.chunks_created} chunks from {request.file_name}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error during document ingestion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search", response_model=SearchResponse)
+async def search_documents(request: SearchRequest):
+    """
+    Perform semantic search on ingested documents.
+    
+    This endpoint searches for semantically similar chunks across all documents
+    or within a specific project if specified.
+    """
+    logger.info(f"Received search request: '{request.query}'")
+    
+    try:
+        rag_service = await get_rag_service()
+        result = await rag_service.search(request)
+        
+        logger.info(f"Search completed: {result.total_found} results found")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error during semantic search: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/rag-health", response_model=HealthCheckResponse)
+async def rag_health_check():
+    """
+    Perform health check on RAG service components.
+    
+    Returns the status of:
+    - Embedding model (GGUF/sentence-transformers)
+    - Vector database connection
+    - Available collections
+    """
+    logger.info("Performing RAG health check")
+    
+    try:
+        rag_service = await get_rag_service()
+        result = await rag_service.health_check()
+        
+        logger.info(f"RAG health check completed: {result.status}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error during RAG health check: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/test-ingest")
+async def test_ingest():
+    """Test endpoint for document ingestion"""
+    test_request = IngestRequest(
+        file_name="test_user_service.py",
+        project="test_project",
+        content='''def authenticate_user(username, password):
+    """
+    Authenticate a user with username and password.
+    
+    Args:
+        username (str): User's username
+        password (str): User's password
+        
+    Returns:
+        dict: User information if authentication successful
+    """
+    # Hash the password for security
+    hashed_password = hash_password(password)
+    
+    # Query database for user
+    user = db.query("SELECT * FROM users WHERE username = ?", (username,))
+    
+    if user and verify_password(hashed_password, user.password_hash):
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
+    
+    return None
+
+
+def create_user(username, password, email):
+    """
+    Create a new user account.
+    
+    Args:
+        username (str): Desired username
+        password (str): User's password
+        email (str): User's email address
+        
+    Returns:
+        dict: Created user information
+    """
+    # Validate input
+    if not username or not password or not email:
+        raise ValueError("All fields are required")
+    
+    # Check if user already exists
+    existing_user = db.query("SELECT id FROM users WHERE username = ?", (username,))
+    if existing_user:
+        raise ValueError("Username already exists")
+    
+    # Create new user
+    hashed_password = hash_password(password)
+    user_id = db.insert(
+        "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
+        (username, hashed_password, email)
+    )
+    
+    return {
+        "user_id": user_id,
+        "username": username,
+        "email": email
+    }
+''',
+        file_type="python",
+        timestamp="2023-10-27T10:30:00Z",
+        metadata={"author": "test", "version": "1.0.0"}
+    )
+    
+    return await ingest_document(test_request)
+
+
+@app.get("/test-search")
+async def test_search():
+    """Test endpoint for semantic search"""
+    test_request = SearchRequest(
+        query="user authentication password hashing",
+        project="test_project",
+        limit=5,
+        score_threshold=0.5
+    )
+
+    return await search_documents(test_request)
+
+
