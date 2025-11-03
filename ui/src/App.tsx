@@ -47,7 +47,7 @@ const AppContent: React.FC = () => {
   const handleInvestigate = async (query: string) => {
     setIsLoading(true);
     setSelectedNode(null);
-    
+
     try {
       const report = await apiClient.investigate(query);
       setImpactReport(report);
@@ -66,7 +66,7 @@ const AppContent: React.FC = () => {
   const handleNodeDelete = async (nodeId: string) => {
     try {
       let result;
-      
+
       // Check if this is a source node or a regular node
       if (nodeId.startsWith('source-')) {
         // This is a source node, use the source deletion API
@@ -75,16 +75,14 @@ const AppContent: React.FC = () => {
           throw new Error('No project selected');
         }
         result = await apiClient.deleteProjectSource(currentProject.id, sourceId);
-        console.log('Source deletion successful:', result);
-        
+
         // Remove from project sources
         setProjectSources(prev => prev.filter(source => source.id !== sourceId));
         // Also refresh from server to ensure consistency
         await fetchProjectSources();
       } else {
-        // This is a regular investigation node, use the node deletion API
-        result = await apiClient.deleteNode(nodeId, currentProject?.id?.toString());
-        console.log('Node deletion successful:', result);
+        // This is a regular node, use the regular node deletion API
+        result = await apiClient.deleteNode(nodeId);
       }
 
       // Remove node from impact report if it exists there
@@ -124,20 +122,16 @@ const AppContent: React.FC = () => {
     try {
       // Call the API to update node metadata using apiClient (handles JWT)
       const result = await apiClient.updateNodeMetadata(nodeId, metadata, currentProject?.id?.toString());
-      console.log('Metadata update successful:', result);
 
       // Update local state for source nodes
       if (nodeId.startsWith('source-')) {
         const sourceId = parseInt(nodeId.replace('source-', ''));
-        setProjectSources(prev => prev.map(source => 
-          source.id === sourceId 
+        setProjectSources(prev => prev.map(source =>
+          source.id === sourceId
             ? { ...source, metadata: { ...source.metadata, ...metadata } }
             : source
         ));
       }
-
-      // Show success message
-      alert('Metadata updated successfully!');
 
     } catch (error) {
       console.error('Error updating metadata:', error);
@@ -234,11 +228,11 @@ const AppContent: React.FC = () => {
         currentView={currentView}
         currentProject={currentProject}
       />
-      
+
       {impactReport?.knowledge_gaps && impactReport.knowledge_gaps.length > 0 && (
         <KnowledgeGapsBanner gaps={impactReport.knowledge_gaps} />
       )}
-      
+
       <div className="main-content">
         <div className="graph-container">
           <DependencyGraph
@@ -250,20 +244,20 @@ const AppContent: React.FC = () => {
             onNodeMetadataUpdate={handleNodeMetadataUpdate}
           />
         </div>
-        
+
         {selectedNodeData && (
           <div className="sidebar">
             <InvestigationPanel node={selectedNodeData} />
           </div>
         )}
-        
+
         {showExplanation && (
           <div className="explanation-sidebar">
             <ExplanationPanel explanation={impactReport?.explanation} />
           </div>
         )}
       </div>
-      
+
       <div className="controls-bar">
         <button
           className="explanation-toggle"

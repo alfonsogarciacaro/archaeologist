@@ -79,7 +79,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
     try {
       const saved = localStorage.getItem('nodePositions');
       const positions = saved ? JSON.parse(saved) : {};
-      console.log('Loading saved positions:', positions);
       return positions;
     } catch {
       console.log('Failed to load saved positions, using empty object');
@@ -90,9 +89,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
   // Save positions to localStorage
   const savePositions = useCallback((positions: Record<string, { x: number; y: number }>) => {
     try {
-      console.log('Saving positions to localStorage:', positions);
       localStorage.setItem('nodePositions', JSON.stringify(positions));
-      console.log('Positions saved successfully');
     } catch (error) {
       console.warn('Failed to save node positions:', error);
     }
@@ -136,7 +133,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
       if (savedPosition) {
         // Use saved position
         position = savedPosition;
-        console.log(`Using saved position for ${node.id}:`, position);
       } else {
         // Calculate default position for new nodes
         const index = allNodes.indexOf(node);
@@ -151,7 +147,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
           };
         };
         position = getPosition(index, allNodes.length);
-        console.log(`Using default position for ${node.id}:`, position);
       }
 
       return {
@@ -203,10 +198,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
 
   // Custom nodes change handler to save positions
   const handleNodesChange = useCallback((changes: any) => {
-    console.log('Nodes changed - raw changes:', changes);
-    console.log('Changes type:', typeof changes);
-    console.log('Is array?', Array.isArray(changes));
-    
     // Handle different formats of changes
     let nodeChanges = [];
     
@@ -220,22 +211,14 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
       nodeChanges = [changes];
     }
     
-    console.log('Processed node changes:', nodeChanges);
-    
     // Look for position changes
-    const movedNodes = nodeChanges.filter((change, index) => {
-      console.log(`Change ${index}:`, change);
-      console.log(`  - type: ${change?.type}`);
-      console.log(`  - dragging: ${change?.dragging}`);
-      console.log(`  - position: ${change?.position}`);
-      
+    const movedNodes = nodeChanges.filter((change) => {
       return change?.type === 'position' && change?.dragging === false;
     });
     
     if (movedNodes.length > 0) {
-      console.log('Nodes moved:', movedNodes);
       
-      // Save new positions
+// Save new positions
       const currentPositions = loadSavedPositions();
       const newPositions = { ...currentPositions };
       
@@ -246,7 +229,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
             x: change.position.x,
             y: change.position.y
           };
-          console.log(`Saving position for ${change.id}:`, change.position);
         } else {
           console.warn(`Invalid position for node ${change.id}:`, change.position);
         }
@@ -260,7 +242,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
   }, [loadSavedPositions, savePositions, onNodesChange]);
 
   React.useEffect(() => {
-    console.log('Updating flow nodes, current nodes:', nodes);
     setNodes(nodes);
   }, [nodes, setNodes]);
 
@@ -311,14 +292,14 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
     }
   }, [onNodeClick, closeAllMenus]);
 
-  // Handle node drag start
+// Handle node drag start
   const onNodeDragStart = useCallback((event: any, node: Node) => {
-    console.log('Node drag started:', node.id);
-  }, []);
+    // Close any open menus when dragging starts
+    closeAllMenus();
+  }, [closeAllMenus]);
 
-  // Handle node drag end to save positions
+  // Handle node drag end
   const onNodeDragEnd = useCallback((event: any, node: Node) => {
-    console.log('Node drag ended:', node.id, 'to position:', node.position);
     
     // Save to localStorage
     const positions: Record<string, { x: number; y: number }> = {
@@ -339,11 +320,8 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
 
   // Handle delete node
   const handleDeleteNode = useCallback((nodeId: string) => {
-    console.log('Delete node clicked:', nodeId); // Keep this for now to verify click works
     const allNodeData = getAllNodeData();
     const nodeData = allNodeData.find(n => n.id === nodeId);
-
-    console.log('Setting delete confirm to visible:', true);
     // Close context menu first, then show dialog
     setContextMenu(prev => ({ ...prev, visible: false }));
     setTimeout(() => {
@@ -357,11 +335,8 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
 
   // Handle view/edit metadata
   const handleViewMetadata = useCallback((nodeId: string) => {
-    console.log('View metadata clicked:', nodeId);
     const allNodeData = getAllNodeData();
     const nodeData = allNodeData.find(n => n.id === nodeId);
-
-    console.log('Setting metadata dialog to visible:', true, 'nodeData:', nodeData);
     
     const existingComment = nodeData?.metadata?.comment || '';
     setEditingMetadata(existingComment);
@@ -389,7 +364,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
   // Update metadata
   const updateMetadata = useCallback((nodeId: string) => {
     const metadata = { comment: editingMetadata };
-    console.log('Updating metadata for node:', nodeId, 'with:', metadata);
     
     if (onNodeMetadataUpdate) {
       onNodeMetadataUpdate(nodeId, metadata);
@@ -467,7 +441,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
           <div
             className="context-menu-item"
             onMouseDown={() => {
-              console.log('Metadata item mouseDown');
               handleViewMetadata(contextMenu.nodeId!);
             }}
           >
@@ -476,7 +449,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
           <div
             className="context-menu-item delete"
             onMouseDown={() => {
-              console.log('Delete item mouseDown');
               handleDeleteNode(contextMenu.nodeId!);
             }}
           >
@@ -488,7 +460,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
       {/* Delete Confirmation Dialog */}
       {deleteConfirm.visible && (
         <>
-          {console.log('Rendering delete confirm dialog for:', deleteConfirm.nodeId)}
           <div className="modal-backdrop" onClick={(e) => {
             if (e.target === e.currentTarget) {
               setDeleteConfirm(prev => ({ ...prev, visible: false }));
@@ -528,7 +499,6 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({
       {/* Metadata Dialog */}
       {metadataDialog.visible && metadataDialog.nodeData && (
         <>
-          {console.log('Rendering metadata dialog for:', metadataDialog.nodeId)}
           <div className="modal-backdrop" onClick={(e) => {
             if (e.target === e.currentTarget) {
               setMetadataDialog(prev => ({ ...prev, visible: false }));
