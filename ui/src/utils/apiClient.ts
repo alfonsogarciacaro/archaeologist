@@ -314,6 +314,44 @@ class ApiClient {
     return response.json();
   }
 
+  // Node management endpoints
+  async deleteNode(nodeId: string, projectId?: string) {
+    const url = projectId
+      ? `/nodes/${encodeURIComponent(nodeId)}?project_id=${encodeURIComponent(projectId)}`
+      : `/nodes/${encodeURIComponent(nodeId)}`;
+
+    const response = await this.request(url, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete node');
+    }
+
+    return response.json();
+  }
+
+  async updateNodeMetadata(nodeId: string, metadata: any, projectId?: string) {
+    const url = projectId
+      ? `/nodes/${encodeURIComponent(nodeId)}/metadata?project_id=${encodeURIComponent(projectId)}`
+      : `/nodes/${encodeURIComponent(nodeId)}/metadata`;
+
+    const response = await this.request(url, {
+      method: 'PUT',
+      body: JSON.stringify({
+        node_id: nodeId,
+        metadata: metadata,
+        project_id: projectId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update node metadata');
+    }
+
+    return response.json();
+  }
+
   // Public methods for AuthContext
   async initialize(): Promise<{ user: User; isAuthenticated: boolean }> {
     try {

@@ -18,7 +18,7 @@ export interface ProjectSource {
   original_filename: string;
   file_size: number;
   content_type: string;
-  metadata?: string;
+  metadata?: { [key: string]: any };
   created_at: string;
 }
 
@@ -61,6 +61,70 @@ const AppContent: React.FC = () => {
 
   const handleNodeClick = (nodeId: string) => {
     setSelectedNode(nodeId);
+  };
+
+  const handleNodeDelete = async (nodeId: string) => {
+    try {
+      // Call the API to delete the node using apiClient (handles JWT)
+      const result = await apiClient.deleteNode(nodeId, currentProject?.id?.toString());
+      console.log('Node deletion successful:', result);
+
+      // Remove node from impact report if it exists there
+      if (impactReport) {
+        const updatedNodes = impactReport.nodes.filter(node => node.id !== nodeId);
+        const updatedEdges = impactReport.edges.filter(edge =>
+          edge.source !== nodeId && edge.target !== nodeId
+        );
+
+        setImpactReport({
+          ...impactReport,
+          nodes: updatedNodes,
+          edges: updatedEdges,
+        });
+      }
+
+      // Remove from project sources if it's a source node
+      if (nodeId.startsWith('source-')) {
+        const sourceId = parseInt(nodeId.replace('source-', ''));
+        setProjectSources(prev => prev.filter(source => source.id !== sourceId));
+      }
+
+      // Clear selection if the deleted node was selected
+      if (selectedNode === nodeId) {
+        setSelectedNode(null);
+      }
+
+    } catch (error) {
+      console.error('Error deleting node:', error);
+      // You might want to show an error message to the user here
+      alert(`Failed to delete node: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleNodeMetadataUpdate = async (nodeId: string, metadata: any) => {
+    try {
+      // Call the API to update node metadata using apiClient (handles JWT)
+      const result = await apiClient.updateNodeMetadata(nodeId, metadata, currentProject?.id?.toString());
+      console.log('Metadata update successful:', result);
+
+      // Update local state for source nodes
+      if (nodeId.startsWith('source-')) {
+        const sourceId = parseInt(nodeId.replace('source-', ''));
+        setProjectSources(prev => prev.map(source => 
+          source.id === sourceId 
+            ? { ...source, metadata: { ...source.metadata, ...metadata } }
+            : source
+        ));
+      }
+
+      // Show success message
+      alert('Metadata updated successfully!');
+
+    } catch (error) {
+      console.error('Error updating metadata:', error);
+      // You might want to show an error message to the user here
+      alert(`Failed to update metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const selectedNodeData = impactReport?.nodes.find(node => node.id === selectedNode);
@@ -163,6 +227,8 @@ const AppContent: React.FC = () => {
             onNodeClick={handleNodeClick}
             selectedNodeId={selectedNode}
             projectSources={projectSources}
+            onNodeDelete={handleNodeDelete}
+            onNodeMetadataUpdate={handleNodeMetadataUpdate}
           />
         </div>
         
