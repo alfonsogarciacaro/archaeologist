@@ -8,7 +8,7 @@ set -e
 MODEL_NAME="bge-small-en-v1.5"
 MODEL_FILE="${MODEL_NAME}.gguf"
 MODEL_URL="https://huggingface.co/Embedding-GGUF/${MODEL_NAME}/resolve/main/${MODEL_FILE}"
-MODELS_DIR="./models"
+MODELS_DIR="./scanner/models"
 
 echo "Downloading BGE Small Embedding Model..."
 echo "Model: ${MODEL_NAME}"
