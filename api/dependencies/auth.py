@@ -5,15 +5,13 @@ This module provides authentication and authorization dependencies
 using the database layer and JWT tokens.
 """
 
-from typing import Optional
-from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .database import get_database
 from db import DatabaseAbc
-from models.database import User, InvestigationSession
-from app.config import get_settings
+from models.database import User
 from app.auth_service import auth_service
 
 
@@ -36,7 +34,7 @@ async def get_current_user(
         )
     
     # Get user from database
-    user_id = int(token_data.get("sub", -1))
+    user_id = auth_service.get_user_id_from_token_data(token_data)
     user = await db.get_user_by_id(user_id)
     if not user or not user.is_active:
         raise HTTPException(
@@ -63,7 +61,7 @@ async def get_current_user_id(
         )
     
     # Extract user_id directly from token
-    user_id = token_data.get("user_id") or int(token_data.get("sub", -1))
+    user_id = auth_service.get_user_id_from_token_data(token_data)
     return user_id
 
 # TODO: extract the is_admin claim from the token to avoid DB lookup
@@ -94,7 +92,7 @@ async def get_optional_user(
             return None
         
         # Get user from database
-        user_id = int(token_data.get("sub", -1))
+        user_id = auth_service.get_user_id_from_token_data(token_data)
         user = await db.get_user_by_id(user_id)
         return user if user and user.is_active else None
         

@@ -17,7 +17,9 @@ from models.database import (
     KnowledgeGap,
     InvestigationSession,
     InvestigationStatus,
-    Source
+    Source,
+    Node,
+    NodeMetadata
 )
 
 
@@ -152,6 +154,37 @@ class DatabaseAbc(abc.ABC):
     @abc.abstractmethod
     async def delete_source(self, source_id: int) -> bool:
         """Delete a source record."""
+        pass
+    
+    @abc.abstractmethod
+    async def update_source_metadata(self, source_id: int, metadata: Dict[str, Any]) -> bool:
+        """Update source metadata."""
+        pass
+    
+    # Node management
+    @abc.abstractmethod
+    async def create_node(self, node: Node) -> Node:
+        """Create a new node."""
+        pass
+    
+    @abc.abstractmethod
+    async def get_node_by_id(self, node_id: str) -> Optional[Node]:
+        """Get node by ID."""
+        pass
+    
+    @abc.abstractmethod
+    async def update_node(self, node_id: str, **kwargs) -> bool:
+        """Update node details."""
+        pass
+    
+    @abc.abstractmethod
+    async def delete_node(self, node_id: str) -> bool:
+        """Delete a node."""
+        pass
+    
+    @abc.abstractmethod
+    async def update_node_metadata(self, node_id: str, metadata: Dict[str, Any]) -> bool:
+        """Update node metadata."""
         pass
     
     # Investigation management

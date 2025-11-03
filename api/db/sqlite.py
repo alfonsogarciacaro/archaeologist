@@ -21,7 +21,9 @@ from models.database import (
     InvestigationStatus,
     Source,
     UserStats,
-    SystemStats
+    SystemStats,
+    Node,
+    NodeMetadata
 )
 
 
@@ -188,6 +190,42 @@ class SQLiteDatabase(DatabaseAbc):
             )
         """)
         
+        # Nodes table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nodes (
+                id TEXT PRIMARY KEY,
+                project_id INTEGER,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL,
+                path TEXT,
+                source_type TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                metadata TEXT,  -- JSON string
+                investigation_id INTEGER,
+                source_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                FOREIGN KEY (investigation_id) REFERENCES investigations (id) ON DELETE CASCADE,
+                FOREIGN KEY (source_id) REFERENCES sources (id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Node metadata table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS node_metadata (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_by INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (node_id) REFERENCES nodes (id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
+            )
+        """)
+        
         # Create indexes for performance
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_user_id ON investigations (user_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_investigations_project_id ON investigations (project_id)")
@@ -201,6 +239,10 @@ class SQLiteDatabase(DatabaseAbc):
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_project_users_user_id ON project_users (user_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_project_id ON sources (project_id)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_uploaded_by ON sources (uploaded_by)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_project_id ON nodes (project_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_investigation_id ON nodes (investigation_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_nodes_source_id ON nodes (source_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_node_metadata_node_id ON node_metadata (node_id)")
 
         await conn.commit()
     
@@ -1037,4 +1079,117 @@ class SQLiteDatabase(DatabaseAbc):
         )
         await conn.commit()
 
+        return cursor.rowcount > 0
+    
+    async def update_source_metadata(self, source_id: int, metadata: Dict[str, Any]) -> bool:
+        """Update source metadata."""
+        conn = self._get_connection()
+        
+        cursor = await conn.execute(
+            "UPDATE sources SET metadata = ? WHERE id = ?",
+            (json.dumps(metadata), source_id)
+        )
+        await conn.commit()
+        
+        return cursor.rowcount > 0
+    
+    # Node management
+    async def create_node(self, node: Node) -> Node:
+        """Create a new node."""
+        conn = self._get_connection()
+        
+        cursor = await conn.execute("""
+            INSERT INTO nodes (id, project_id, name, type, path, source_type, confidence, metadata, investigation_id, source_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            node.id,
+            node.project_id,
+            node.name,
+            node.type,
+            node.path,
+            node.source_type,
+            node.confidence,
+            json.dumps(node.metadata) if node.metadata else None,
+            node.investigation_id,
+            node.source_id
+        ))
+        
+        await conn.commit()
+        
+        # Return created node
+        created_node = await self.get_node_by_id(node.id)
+        if created_node:
+            return created_node
+        else:
+            # Fallback to input node if database query fails
+            return node
+    
+    async def get_node_by_id(self, node_id: str) -> Optional[Node]:
+        """Get node by ID."""
+        conn = self._get_connection()
+        
+        cursor = await conn.execute(
+            "SELECT * FROM nodes WHERE id = ?", (node_id,)
+        )
+        row = await cursor.fetchone()
+        
+        if row:
+            # Parse JSON metadata - convert Row to dict first
+            row_dict = {key: row[key] for key in row.keys()}
+            if row_dict['metadata']:
+                row_dict['metadata'] = json.loads(row_dict['metadata'])
+            return Node(**row_dict)
+        
+        return None
+    
+    async def update_node(self, node_id: str, **kwargs) -> bool:
+        """Update node details."""
+        conn = self._get_connection()
+        
+        # Build dynamic update query
+        set_clauses = []
+        values = []
+        
+        for key, value in kwargs.items():
+            if key in ['name', 'type', 'path', 'source_type', 'confidence']:
+                set_clauses.append(f"{key} = ?")
+                values.append(value)
+            elif key == 'metadata':
+                set_clauses.append("metadata = ?")
+                values.append(json.dumps(value) if value else None)
+        
+        if not set_clauses:
+            return False
+        
+        values.append(node_id)
+        
+        cursor = await conn.execute(
+            f"UPDATE nodes SET {', '.join(set_clauses)} WHERE id = ?",
+            values
+        )
+        await conn.commit()
+        
+        return cursor.rowcount > 0
+    
+    async def delete_node(self, node_id: str) -> bool:
+        """Delete a node."""
+        conn = self._get_connection()
+        
+        cursor = await conn.execute(
+            "DELETE FROM nodes WHERE id = ?", (node_id,)
+        )
+        await conn.commit()
+        
+        return cursor.rowcount > 0
+    
+    async def update_node_metadata(self, node_id: str, metadata: Dict[str, Any]) -> bool:
+        """Update node metadata."""
+        conn = self._get_connection()
+        
+        cursor = await conn.execute(
+            "UPDATE nodes SET metadata = ? WHERE id = ?",
+            (json.dumps(metadata), node_id)
+        )
+        await conn.commit()
+        
         return cursor.rowcount > 0

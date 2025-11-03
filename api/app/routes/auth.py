@@ -122,7 +122,8 @@ async def refresh_token(
             detail="Database connection error"
         )
     
-    user = await db.get_user_by_id(token_data["user_id"])
+    user_id = auth_service.get_user_id_from_token_data(token_data)
+    user = await db.get_user_by_id(user_id)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

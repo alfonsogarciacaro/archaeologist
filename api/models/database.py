@@ -45,6 +45,7 @@ class Source(BaseModel):
     file_type: str = Field(..., max_length=100)  # MIME type
     content_type: str = Field(..., max_length=50)  # text, zip, etc.
     data_lake_entry_id: str = Field(..., max_length=255)  # Reference to data lake entry
+    metadata: Optional[Dict[str, Any]] = None  # User-defined metadata like comments
     uploaded_by: int
     created_at: Optional[datetime] = None
 
@@ -143,6 +144,33 @@ class UserStats(BaseModel):
     avg_execution_time_ms: Optional[float]
     knowledge_gaps_identified: int
     last_investigation_date: Optional[datetime]
+
+
+class Node(BaseModel):
+    """Node model for dependency graph components."""
+    id: str
+    project_id: Optional[int] = None
+    name: str = Field(..., max_length=255)
+    type: str = Field(..., max_length=50)  # file, api_endpoint, db_table, repo, etc.
+    path: Optional[str] = Field(None, max_length=500)
+    source_type: str = Field(..., max_length=50)  # investigation, uploaded_file, etc.
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    metadata: Optional[Dict[str, Any]] = None  # User-defined metadata like comments
+    investigation_id: Optional[int] = None  # Link to investigation if from analysis
+    source_id: Optional[int] = None  # Link to source if uploaded file
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class NodeMetadata(BaseModel):
+    """Metadata for nodes in the dependency graph."""
+    id: Optional[int] = None
+    node_id: str
+    key: str = Field(..., max_length=100)
+    value: str = Field(..., max_length=1000)
+    created_by: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class SystemStats(BaseModel):

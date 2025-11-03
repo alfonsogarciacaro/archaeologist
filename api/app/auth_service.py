@@ -93,6 +93,10 @@ class AuthService:
             "is_admin": user.is_admin
         }
         return self.create_access_token(data=token_data)
+    
+    def get_user_id_from_token_data(self, token_data: Dict[str, Any]) -> int:
+        user_id = token_data.get("user_id") or int(token_data.get("sub", -1))
+        return user_id    
 
 
 # Global auth service instance

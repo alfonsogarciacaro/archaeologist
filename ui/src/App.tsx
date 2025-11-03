@@ -65,9 +65,27 @@ const AppContent: React.FC = () => {
 
   const handleNodeDelete = async (nodeId: string) => {
     try {
-      // Call the API to delete the node using apiClient (handles JWT)
-      const result = await apiClient.deleteNode(nodeId, currentProject?.id?.toString());
-      console.log('Node deletion successful:', result);
+      let result;
+      
+      // Check if this is a source node or a regular node
+      if (nodeId.startsWith('source-')) {
+        // This is a source node, use the source deletion API
+        const sourceId = parseInt(nodeId.replace('source-', ''));
+        if (!currentProject?.id) {
+          throw new Error('No project selected');
+        }
+        result = await apiClient.deleteProjectSource(currentProject.id, sourceId);
+        console.log('Source deletion successful:', result);
+        
+        // Remove from project sources
+        setProjectSources(prev => prev.filter(source => source.id !== sourceId));
+        // Also refresh from server to ensure consistency
+        await fetchProjectSources();
+      } else {
+        // This is a regular investigation node, use the node deletion API
+        result = await apiClient.deleteNode(nodeId, currentProject?.id?.toString());
+        console.log('Node deletion successful:', result);
+      }
 
       // Remove node from impact report if it exists there
       if (impactReport) {
@@ -83,12 +101,6 @@ const AppContent: React.FC = () => {
         });
       }
 
-      // Remove from project sources if it's a source node
-      if (nodeId.startsWith('source-')) {
-        const sourceId = parseInt(nodeId.replace('source-', ''));
-        setProjectSources(prev => prev.filter(source => source.id !== sourceId));
-      }
-
       // Clear selection if the deleted node was selected
       if (selectedNode === nodeId) {
         setSelectedNode(null);
@@ -96,7 +108,14 @@ const AppContent: React.FC = () => {
 
     } catch (error) {
       console.error('Error deleting node:', error);
-      // You might want to show an error message to the user here
+      
+      // If deletion failed because item not found, refresh data to get current state
+      if (error instanceof Error && error.message.includes('not found')) {
+        console.log('Item not found, refreshing project sources...');
+        await fetchProjectSources();
+      }
+      
+      // Show error message to user
       alert(`Failed to delete node: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };

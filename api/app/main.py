@@ -90,6 +90,27 @@ class ImpactReport(BaseModel):
     explanation: Optional[Dict[str, Any]] = None
     recommendations: Optional[List[str]] = None
 
+# Node Management Models
+class NodeDeleteRequest(BaseModel):
+    node_id: str
+    project_id: Optional[str] = None
+
+class NodeDeleteResponse(BaseModel):
+    success: bool
+    message: str
+    deleted_node_id: str
+
+class NodeMetadataUpdateRequest(BaseModel):
+    node_id: str
+    metadata: Dict[str, Any]
+    project_id: Optional[str] = None
+
+class NodeMetadataUpdateResponse(BaseModel):
+    success: bool
+    message: str
+    node_id: str
+    updated_metadata: Dict[str, Any]
+
 @app.get("/")
 async def root():
     return {"message": "Enterprise Code Archaeologist API", "version": "1.0.0"}
@@ -241,9 +262,117 @@ async def investigation_status():
     }
 
 
+# Node Management Endpoints
+@api_v1_router.delete("/nodes/{node_id}", response_model=NodeDeleteResponse)
+async def delete_node(
+    node_id: str,
+    project_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    """
+    Delete a node from the dependency graph.
+
+    This endpoint removes a node and all its associated edges from the system.
+    """
+    try:
+        logger.info(f"User {current_user.username} deleting node {node_id} for project {project_id or 'default'}")
+
+        # Check if node exists
+        node = await db.get_node_by_id(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+
+        # Check user permissions for the project if node is project-scoped
+        if node.project_id:
+            user_role = await db.get_user_project_role(node.project_id, current_user.id)
+            if not user_role or user_role not in ['owner', 'admin']:
+                raise HTTPException(status_code=403, detail="Insufficient permissions to delete nodes in this project")
+
+        # Delete the node
+        success = await db.delete_node(node_id)
+        
+        if success:
+            return NodeDeleteResponse(
+                success=True,
+                message=f"Node {node_id} successfully deleted",
+                deleted_node_id=node_id
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete node")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting node {node_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete node: {str(e)}")
+
+
+@api_v1_router.put("/nodes/{node_id}/metadata", response_model=NodeMetadataUpdateResponse)
+async def update_node_metadata(
+    node_id: str,
+    request: NodeMetadataUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    """
+    Update metadata for a node in the dependency graph.
+
+    This endpoint allows updating custom metadata associated with a node.
+    This could include things like custom labels, descriptions, or other user-defined properties.
+    """
+    try:
+        logger.info(f"User {current_user.username} updating metadata for node {node_id} with data: {request.metadata}")
+
+        # Check if node exists
+        node = await db.get_node_by_id(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+
+        # Check user permissions for project if node is project-scoped
+        if node.project_id:
+            user_role = await db.get_user_project_role(node.project_id, current_user.id)
+            if not user_role or user_role not in ['owner', 'admin', 'member']:
+                raise HTTPException(status_code=403, detail="Insufficient permissions to update nodes in this project")
+
+        # Update metadata
+        success = await db.update_node_metadata(node_id, request.metadata)
+        
+        if success:
+            return NodeMetadataUpdateResponse(
+                success=True,
+                message=f"Metadata for node {node_id} successfully updated",
+                node_id=node_id,
+                updated_metadata=request.metadata
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update node metadata")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating metadata for node {node_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update node metadata: {str(e)}")
+
+
+@api_v1_router.post("/nodes/delete", response_model=NodeDeleteResponse)
+async def delete_node_with_body(
+    request: NodeDeleteRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Alternative endpoint to delete a node using POST with request body.
+
+    This is useful when the node_id might contain special characters that cause issues with URL parameters,
+    or when you want to include additional context in the request.
+    """
+    return await delete_node(request.node_id, request.project_id, current_user)
+
+
 # Include all routers under the API v1 router
 from .routes.auth import router as auth_router
 from .routes.projects import router as projects_router
+from dependencies.database import get_database
 
 # Include all routers under the /api/v1 prefix
 api_v1_router.include_router(auth_router)
