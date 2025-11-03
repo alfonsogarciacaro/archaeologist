@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Context Menu Test</title>
+    <style>
+        .context-menu {
+            position: fixed;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            padding: 8px 0;
+            z-index: 1000;
+            min-width: 180px;
+        }
+
+        .context-menu-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.15s ease;
+        }
+
+        .context-menu-item:hover {
+            background-color: #f3f4f6;
+        }
+
+        .context-menu-item.delete {
+            color: #dc2626;
+        }
+
+        .context-menu-item.delete:hover {
+            background-color: #fef2f2;
+        }
+
+        .test-area {
+            width: 300px;
+            height: 200px;
+            background: lightblue;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-area" oncontextmenu="showContextMenu(event)">
+        Right-click me to test context menu
+    </div>
+
+    <div id="contextMenu" class="context-menu" style="display: none;" onclick="event.stopPropagation()">
+        <div class="context-menu-item" onclick="handleAction('metadata')">
+            📝 View/Edit Metadata
+        </div>
+        <div class="context-menu-item delete" onclick="handleAction('delete')">
+            🗑️ Delete Node
+        </div>
+    </div>
+
+    <script>
+        function showContextMenu(event) {
+            event.preventDefault();
+            const menu = document.getElementById('contextMenu');
+            menu.style.left = event.clientX + 'px';
+            menu.style.top = event.clientY + 'px';
+            menu.style.display = 'block';
+        }
+
+        function handleAction(action) {
+            alert(action + ' clicked!');
+            hideContextMenu();
+        }
+
+        function hideContextMenu() {
+            document.getElementById('contextMenu').style.display = 'none';
+        }
+
+        // Close context menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const target = event.target;
+            if (!target.closest('.context-menu')) {
+                hideContextMenu();
+            }
+        });
+    </script>
+</body>
+</html>
