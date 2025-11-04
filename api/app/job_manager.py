@@ -11,8 +11,8 @@ import json
 from typing import Dict, Any, Optional
 from pathlib import Path
 
-from .rag.rag_service import get_rag_service
-from .rag.models import IngestRequest
+from .scanner.rag.rag_service import get_rag_service
+from .scanner.rag.models import IngestRequest
 from .config import get_settings
 
 logger = logging.getLogger(__name__)

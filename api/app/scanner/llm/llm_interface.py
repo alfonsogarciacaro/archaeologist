@@ -38,7 +38,7 @@ class OpenAIProvider(LLMProvider):
         self.api_url = settings.LLM_API_URL or "http://localhost:11434/v1"
         self.api_key = settings.LLM_API_KEY or "no-key-required"
         self.model = settings.LLM_MODEL or "llama2"
-        self.scanner_port = settings.SCANNER_PORT
+        self.api_port = settings.WEB_PORT
         # Don't use base_url since we need full URL control
         self.client = httpx.AsyncClient(timeout=60.0)
     

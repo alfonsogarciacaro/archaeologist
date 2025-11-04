@@ -1,6 +1,6 @@
 services:
   api:
-    build: 
+    build:
       context: .
       dockerfile: api/Dockerfile
       args:
@@ -9,26 +9,38 @@ services:
       - "${WEB_PORT}:8000"
     environment:
       - NODE_ENV=${NODE_ENV}
-      - SCANNER_URL=${SCANNER_URL}
-      - VECTORDB_HOST=${VECTORDB_HOST}
-      - VECTORDB_PORT=${VECTORDB_PORT}
-      - LLM_API_URL=${LLM_API_URL}
       - WEB_PORT=${WEB_PORT}
-      - SCANNER_PORT=${SCANNER_PORT}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME}
       - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
       - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL}
       - OTEL_RESOURCE_ATTRIBUTES=${OTEL_RESOURCE_ATTRIBUTES}
+      # Redis configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      # RAG and LLM configuration
+      - EMBEDDING_TYPE=${EMBEDDING_TYPE}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - LLM_API_URL=${LLM_API_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
     volumes:
       - ./api/app:/app/app:ro
-      - ./scanner:/app/scanner:ro
       - ./shared:/app/shared:ro
       - ./ui/build:/app/static:ro  # Mount built UI as static assets
       - ./mock_enterprise:/app/mock_enterprise:ro
     depends_on:
       - vectordb
-      - scanner
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
 
   vectordb:
     image: ${VECTORDB_IMAGE}
@@ -41,27 +53,6 @@ services:
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=INFO
 
-  scanner:
-    build: 
-      context: .
-      dockerfile: scanner/Dockerfile
-      args:
-        CONTAINER_REGISTRY: ${CONTAINER_REGISTRY}
-    ports:
-      - "${SCANNER_PORT}:8000"
-    volumes:
-      - ./scanner:/app:ro
-      - ./shared:/app/shared:ro
-      - ./mock_enterprise:/app/mock_enterprise:ro
-    environment:
-      - NODE_ENV=${NODE_ENV}
-      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
-      - SCANNER_PORT=${SCANNER_PORT}
-      - OTEL_SERVICE_NAME=archaeologist-scanner
-      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
-      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL}
-      - OTEL_RESOURCE_ATTRIBUTES=service.name=archaeologist-scanner,service.version=${OTEL_SERVICE_VERSION},deployment.environment=${NODE_ENV}
-
 volumes:
   vectordb_data:
+  redis_data:

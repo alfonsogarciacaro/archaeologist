@@ -4,30 +4,41 @@ This document provides a comprehensive guide for setting up enterprise-grade Pyt
 
 ## 🏗️ Core Architecture Principles
 
-### 1. **Multi-Mode Development**
-- **Debug Mode**: Separate processes with virtual environments for fast iteration
-- **Dev Mode**: Containerized development with development configuration
-- **Prod Mode**: Optimized containerized deployment
+### 1. **Consolidated Service Architecture**
+- **Single API Service**: All functionality consolidated into one FastAPI application
+- **Redis Queue**: For long-running background tasks (file processing, complex LLM analysis)
+- **Vector Database**: For RAG and semantic search capabilities
+- **Synchronous Operations**: Simple requests handled immediately (code scanning, status checks)
 
 ### 2. **Centralized Configuration**
 - Environment variables in `.env.dev` and `.env.prod`
 - Type-safe configuration with validation
 - Configurable registries and external services
+- Integrated scanner configuration (RAG, LLM, embeddings)
 
 ### 3. **Container Compatibility**
 - RHEL UBI base images for enterprise compatibility
 - Docker and Podman support via alias detection
 - Optimized COPY commands with .dockerignore
+- Single service deployment with Redis and VectorDB dependencies
 
 ### 4. **Modern Python Tooling**
 - `uv` for cross-platform package management
 - Virtual environments with proper activation
 - Shared modules for code reuse
+- Integrated dependencies (FastAPI + scanner functionality)
 
 ### 5. **Observability First**
 - OpenTelemetry for distributed tracing
 - Graceful degradation when disabled
 - Business and infrastructure metrics
+- Unified logging and monitoring
+
+### 6. **Asynchronous Processing**
+- **Non-blocking uploads**: Files stored immediately, processed asynchronously
+- **Redis-based job queues**: Priority-based task distribution
+- **Background workers**: Handle intensive processing without blocking API requests
+- **Progress tracking**: Real-time status updates via API endpoints
 
 
 ## Test with User Stories (STORIES.md)
@@ -73,6 +84,71 @@ So that I can find exact references to changed components
 - All matches have 1.0 confidence (literal)
 ```
 
+
+## 🏛️ Updated Architecture Overview
+
+### Current Architecture (Consolidated)
+```
+┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
+│   Single API    │───▶│ Redis Queue  │───▶│ Background     │
+│   Service       │    │              │    │ Workers         │
+│ (FastAPI)       │    │              │    │ (async tasks)   │
+│                 │    │              │    │                 │
+│ • Web API       │    │ • Priority   │    │ • File Process  │
+│ • Scanner       │    │   Queue      │    │ • RAG Ingest    │
+│ • LLM           │    │ • Job Status │    │ • Complex LLM   │
+│ • RAG           │    │ • TTL        │    │ • Batch Ops     │
+└─────────────────┘    └──────────────┘    └─────────────────┘
+         │                                           │
+         ▼                                           ▼
+┌─────────────────┐                         ┌─────────────────┐
+│   React UI      │                         │ Vector DB       │
+│   (static)      │                         │ (Qdrant)        │
+└─────────────────┘                         └─────────────────┘
+```
+
+### Previous Architecture (Deprecated)
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   API Service   │───▶│   Scanner       │───▶│ External LLM    │
+│                 │    │   Service       │    │ Services        │
+│ • Web API       │    │ • Code Analysis │    │                 │
+│ • Auth          │    │ • RAG           │    │ • Ollama        │
+│ • Projects      │    │ • LLM           │    │ • OpenAI        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                        │
+         ▼                       ▼                        ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   React UI      │    │ Vector DB       │    │ Redis Queue     │
+│                 │    │ (Qdrant)        │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## ✅ Benefits of Consolidation
+
+### **Simplified Operations**
+- **Single deployment**: One service to build, deploy, and maintain
+- **Unified configuration**: One set of environment variables
+- **Reduced complexity**: No inter-service HTTP communication
+- **Easier debugging**: Single codebase and log stream
+
+### **Better Resource Utilization**
+- **Shared connections**: Database, Redis, and vector DB connections reused
+- **Memory efficiency**: Single process with shared memory
+- **CPU optimization**: Better task scheduling within single process
+- **Connection pooling**: Shared connection pools across all functionality
+
+### **Maintained Scalability**
+- **Horizontal scaling**: Multiple API instances with shared Redis queue
+- **Async processing**: Non-blocking operations maintained
+- **Background workers**: Still handle intensive tasks separately
+- **Load balancing**: API instances can be load-balanced
+
+### **Development Efficiency**
+- **Single codebase**: Easier onboarding and development
+- **Faster iteration**: No need to sync changes between services
+- **Simplified testing**: Integration tests with single service
+- **Unified CI/CD**: Single build and deployment pipeline
 
 ## 🎯 Getting Started Checklist
 

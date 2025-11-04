@@ -21,8 +21,8 @@ class MockLLMService:
     
     def __init__(self):
         settings = get_settings()
-        self.scanner_port = settings.SCANNER_PORT
-        self.client = httpx.AsyncClient(base_url=f"http://localhost:{self.scanner_port}", timeout=30.0)
+        self.api_port = settings.WEB_PORT
+        self.client = httpx.AsyncClient(base_url=f"http://localhost:{self.api_port}", timeout=30.0)
     
     async def investigate_change(self, query: str) -> Dict[str, Any]:
         """

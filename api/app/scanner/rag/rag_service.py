@@ -12,10 +12,10 @@ import re
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
-from app.embeddings.embedding_factory import get_embedding
-from app.text_processing.chunker import TextChunker
-from app.text_processing.preprocessor import TextPreprocessor
-from app.config import get_settings
+from ..embeddings.embedding_factory import get_embedding
+from ..text_processing.chunker import TextChunker
+from ..text_processing.preprocessor import TextPreprocessor
+from ...config import get_settings
 from .models import (
     IngestRequest,
     IngestResponse,

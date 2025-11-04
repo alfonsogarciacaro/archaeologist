@@ -49,7 +49,7 @@ class DependencyAnalysisTool(Tool):
         """Execute dependency analysis using scanner service"""
         try:
             settings = get_settings()
-            scanner_url = f"http://localhost:{settings.SCANNER_PORT}"
+            scanner_url = f"http://localhost:{settings.WEB_PORT}/scanner"
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(f"{scanner_url}/analyze-dependencies", json={

@@ -11,7 +11,6 @@ usage() {
     echo "Components:"
     echo "  frontend - Run frontend tests only"
     echo "  api      - Run API tests only"
-    echo "  scanner  - Run Scanner tests only"
     echo "  (no args) - Run all tests"
     echo ""
     echo "Requirements: uv (Python package manager) must be installed"
@@ -32,7 +31,7 @@ if [[ "$COMPONENT" == "help" || "$COMPONENT" == "--help" || "$COMPONENT" == "-h"
 fi
 
 # Validate component argument
-if [[ "$COMPONENT" != "all" && "$COMPONENT" != "frontend" && "$COMPONENT" != "api" && "$COMPONENT" != "scanner" ]]; then
+if [[ "$COMPONENT" != "all" && "$COMPONENT" != "frontend" && "$COMPONENT" != "api" ]]; then
     echo "❌ Invalid component: $COMPONENT"
     echo ""
     usage
@@ -85,30 +84,6 @@ run_api_tests() {
         echo "✅ API tests passed"
     else
         echo "❌ API tests failed"
-    fi
-    
-    return $TEST_EXIT_CODE
-}
-
-# Function to run Scanner tests
-run_scanner_tests() {
-    echo ""
-    echo "🔍 Running Scanner Tests..."
-    echo "=========================="
-    
-    # Install dependencies
-    cd scanner
-    uv sync --locked
-    
-    # Run tests with current directory in Python path
-    uv run python -m pytest -v --tb=short
-    TEST_EXIT_CODE=$?
-    cd ..
-    
-    if [ $TEST_EXIT_CODE -eq 0 ]; then
-        echo "✅ Scanner tests passed"
-    else
-        echo "❌ Scanner tests failed"
     fi
     
     return $TEST_EXIT_CODE
@@ -173,10 +148,6 @@ case "$COMPONENT" in
         run_api_tests
         FINAL_EXIT_CODE=$?
         ;;
-    "scanner")
-        run_scanner_tests
-        FINAL_EXIT_CODE=$?
-        ;;
     "frontend")
         run_frontend_tests
         FINAL_EXIT_CODE=$?
@@ -189,9 +160,6 @@ case "$COMPONENT" in
         run_api_tests
         API_EXIT_CODE=$?
         
-        run_scanner_tests  
-        SCANNER_EXIT_CODE=$?
-        
         run_frontend_tests
         FRONTEND_EXIT_CODE=$?
         
@@ -199,7 +167,7 @@ case "$COMPONENT" in
         run_containerized_tests
         
         # Determine final exit code
-        if [ $API_EXIT_CODE -ne 0 ] || [ $SCANNER_EXIT_CODE -ne 0 ] || [ $FRONTEND_EXIT_CODE -ne 0 ]; then
+        if [ $API_EXIT_CODE -ne 0 ] || [ $FRONTEND_EXIT_CODE -ne 0 ]; then
             FINAL_EXIT_CODE=1
         fi
         

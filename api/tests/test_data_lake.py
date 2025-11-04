@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from shared import (
-    DiskDataLake,
+from app.disk_data_lake import DiskDataLake
+from app.data_lake_interface import (
     DataLakeEntry,
     DataType,
     NotFoundError,

@@ -12,11 +12,8 @@ class Settings:
         if self.COMPOSE_PROJECT_NAME is None:
             raise ValueError("COMPOSE_PROJECT_NAME environment variable is required")
         
-        # Ports
-        scanner_port = os.getenv("SCANNER_PORT")
-        if scanner_port is None:
-            raise ValueError("SCANNER_PORT environment variable is required")
-        self.SCANNER_PORT = int(scanner_port)
+        # Ports - Scanner is now integrated into API
+        self.WEB_PORT = int(os.getenv("WEB_PORT", "8000"))
         
         # Paths
         self.MOCK_ENTERPRISE_PATH = "/app/mock_enterprise"

@@ -27,26 +27,39 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Enterprise Code Archaeologist API")
 
-    # Initialize job client
+    # Initialize job client and start worker
     try:
         from .job_client import job_client
+        from .job_manager import job_manager
+
+        # Connect to Redis
         await job_client.connect()
-        logger.info("Job client initialized successfully")
+
+        # Start job worker in background
+        worker_task = asyncio.create_task(
+            job_client.start_worker(job_manager.process_job)
+        )
+
+        # Store worker task for shutdown
+        app.state.worker_task = worker_task
+
+        logger.info("Job client and worker initialized successfully")
     except Exception as e:
-        logger.warning(f"Failed to initialize job client: {e}")
-        # Continue without job client - job processing will be disabled
+        logger.warning(f"Failed to initialize job client/worker: {e}")
+        # Continue without job worker - job processing will be disabled
 
     yield
     # Shutdown
     logger.info("Shutting down application")
 
-    # Disconnect job client
+    # Stop job worker and disconnect job client
     try:
         from .job_client import job_client
+        await job_client.stop_worker()
         await job_client.disconnect()
-        logger.info("Job client disconnected")
+        logger.info("Job worker stopped and client disconnected")
     except Exception as e:
-        logger.warning(f"Error disconnecting job client: {e}")
+        logger.warning(f"Error stopping job worker/client: {e}")
 
     await close_database()
 
@@ -144,26 +157,24 @@ async def investigate_change(
 ):
     """
     Investigate the impact of a proposed change across the enterprise system.
-    
-    This endpoint now calls the scanner service which handles LLM analysis
-    to identify potentially affected components, dependencies, and knowledge gaps.
+
+    This endpoint now uses the integrated scanner functionality to handle LLM analysis
+    and identify potentially affected components, dependencies, and knowledge gaps.
     """
     # Note: Automatic HTTP tracing is handled by middleware
     # Business logic tracing can be added here if needed
-    
+
     try:
-        # Call scanner service for LLM investigation
-        import httpx
-        scanner_url = settings.SCANNER_URL
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{scanner_url}/investigate",
-                json={"query": request.query},
-                timeout=60.0
-            )
-            response.raise_for_status()
-            investigation_result = response.json()
+        # Use integrated scanner for LLM investigation
+        from .scanner.llm.llm_interface import get_llm_provider
+        from .routes.scanner import InvestigationRequest as ScannerInvestigationRequest
+
+        # Create scanner investigation request
+        scanner_request = ScannerInvestigationRequest(query=request.query, use_mock=False)
+
+        # Get LLM provider and perform investigation
+        llm_provider = await get_llm_provider()
+        investigation_result = await llm_provider.investigate_change(request.query)
         
         # Convert the LLM response to our ImpactReport format
         nodes = []
@@ -239,23 +250,21 @@ async def investigate_change(
 async def investigation_status():
     """Get status of investigation components"""
     try:
-        # Check if scanner service is available
-        if settings.SCANNER_URL is None:
-            raise ValueError("SCANNER_URL is not configured")
-        import httpx
-        async with httpx.AsyncClient() as client:
-            scanner_response = await client.get(settings.SCANNER_URL + "/health", timeout=5.0)
-            scanner_status = scanner_response.json().get("status", "unknown")
+        # Check integrated scanner components
+        from .scanner.llm.llm_interface import get_llm_provider
+        from .scanner.rag.rag_service import get_rag_service
+
+        # Check LLM status
+        llm_provider = await get_llm_provider()
+        llm_status = await llm_provider.health_check()
+
+        # Check RAG status
+        rag_service = await get_rag_service()
+        rag_status = await rag_service.health_check()
+
+        scanner_status = {"status": "healthy", "components": {"llm": llm_status, "rag": rag_status}}
     except Exception as e:
-        scanner_status = f"unavailable: {str(e)}"
-    
-    # Check LLM status via scanner service
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            llm_response = await client.get(f"{settings.SCANNER_URL}/llm-health", timeout=5.0)
-            llm_status = llm_response.json()
-    except Exception as e:
+        scanner_status = {"status": f"unavailable: {str(e)}", "llm": {"status": "unavailable"}, "rag": {"status": "unavailable"}}
         llm_status = {"status": f"unavailable: {str(e)}"}
     
     # Determine capabilities based on scanner LLM
@@ -394,12 +403,16 @@ async def delete_node_with_body(
 from .routes.auth import router as auth_router
 from .routes.projects import router as projects_router
 from .routes.jobs import router as jobs_router
+from .routes.scanner import router as scanner_router
 from dependencies.database import get_database
 
 # Include all routers under the /api/v1 prefix
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(projects_router)
 api_v1_router.include_router(jobs_router)
+
+# Include scanner router directly (not under /api/v1 for backward compatibility)
+app.include_router(scanner_router)
 
 # Include the API v1 router in the main app
 app.include_router(api_v1_router)

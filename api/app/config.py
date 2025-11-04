@@ -14,30 +14,34 @@ class Settings:
         
         # Ports
         self.WEB_PORT = int(os.getenv("WEB_PORT", 8000))
-        self.SCANNER_PORT = int(os.getenv("SCANNER_PORT", 8002))
 
-        # Service URLs
-        self.SCANNER_URL = os.getenv("SCANNER_URL")
-        if self.SCANNER_URL is None:
-            raise ValueError("SCANNER_URL environment variable is required")
-        
-        self.VECTORDB_HOST = os.getenv("VECTORDB_HOST")
-        if self.VECTORDB_HOST is None:
-            raise ValueError("VECTORDB_HOST environment variable is required")
-
-        self.VECTORDB_PORT = int(os.getenv("VECTORDB_PORT", 8001))
-        if self.VECTORDB_PORT is None:
-            raise ValueError("VECTORDB_PORT environment variable is required")
-        
+        self.VECTORDB_HOST = os.getenv("VECTORDB_HOST", "localhost")
+        self.VECTORDB_PORT = int(os.getenv("VECTORDB_PORT", "6333"))
         self.VECTORDB_URL = f"http://{self.VECTORDB_HOST}:{self.VECTORDB_PORT}"
-        
+
         # Vector Database Configuration
         self.VECTORDB_TYPE = os.getenv("VECTORDB_TYPE", "qdrant")
         self.VECTORDB_COLLECTION_PREFIX = os.getenv("VECTORDB_COLLECTION_PREFIX", "archaeologist")
-        
-        # LLM Configuration - Now handled by scanner service
-        # Note: LLM functionality has been moved to scanner service
-        # API service now calls scanner's /investigate endpoint
+
+        # RAG Configuration (now integrated)
+        self.EMBEDDING_TYPE = os.getenv("EMBEDDING_TYPE", "local")
+        self.EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+        self.EMBEDDING_MODEL_PATH = os.getenv("EMBEDDING_MODEL_PATH", "./models/bge-small-en-v1.5.gguf")
+        self.EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+        self.MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", "512"))
+        self.EMBEDDING_THREADS = os.getenv("EMBEDDING_THREADS")  # None for auto-detect
+
+        # Chunking Configuration
+        self.CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "512"))
+        self.CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "50"))
+        self.MIN_CHUNK_SIZE = int(os.getenv("MIN_CHUNK_SIZE", "100"))
+        self.MAX_EMBEDDING_BATCH_SIZE = int(os.getenv("MAX_EMBEDDING_BATCH_SIZE", "32"))
+
+        # LLM Configuration (now integrated)
+        self.LLM_API_URL = os.getenv("LLM_API_URL")
+        self.LLM_API_KEY = os.getenv("LLM_API_KEY")
+        self.LLM_MODEL = os.getenv("LLM_MODEL", "llama2")
+        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
         
         # Database Configuration
         self.database_url = os.getenv("DATABASE_URL", "sqlite:///archaeologist.db")
@@ -69,6 +73,7 @@ class Settings:
         self.JOB_QUEUE_NAME = os.getenv("JOB_QUEUE_NAME", "archaeologist_jobs")
         self.JOB_RESULT_TTL = int(os.getenv("JOB_RESULT_TTL", "86400"))  # 24 hours
         self.JOB_TIMEOUT = int(os.getenv("JOB_TIMEOUT", "3600"))  # 1 hour
+        self.JOB_POLL_INTERVAL = int(os.getenv("JOB_POLL_INTERVAL", "5"))  # seconds
 
         # Paths
         self.MOCK_ENTERPRISE_PATH = "/app/mock_enterprise"
